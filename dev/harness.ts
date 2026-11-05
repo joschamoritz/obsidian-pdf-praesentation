@@ -21,6 +21,7 @@ const fakeAdapter: InkAdapter = {
   write: async (path, data) => localStorage.setItem(PREFIX + path, data),
   remove: async (path) => localStorage.removeItem(PREFIX + path),
   mkdir: async () => undefined,
+  stat: async (path) => (localStorage.getItem(PREFIX + path) === null ? null : { mtime: 1 }),
   rename: async (from, to) => {
     localStorage.setItem(PREFIX + to, localStorage.getItem(PREFIX + from) ?? '');
     localStorage.removeItem(PREFIX + from);
@@ -43,7 +44,7 @@ const doc = (await pdfjs.getDocument({ data: bytes }).promise) as unknown as Pdf
 const store = new InkStore(fakeAdapter, 'tinte');
 const loaded = await store.load(path, contentHash, doc.numPages, () => true);
 const { session } = loaded;
-const saver = new InkSaver(store, path, contentHash, session, loaded.fileName, loaded.readOnly, (error) => console.error(error));
+const saver = InkSaver.fromLoad(store, path, contentHash, loaded, (error) => console.error(error), () => console.warn('Konflikt'));
 const presenter = new Presenter({
   doc,
   session,

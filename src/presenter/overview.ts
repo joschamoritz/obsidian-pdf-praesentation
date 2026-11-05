@@ -6,11 +6,14 @@ import type { PdfRenderTask } from './types';
 
 const THUMBNAIL_PIXELS = 360;
 const CONFIRM_MS = 4000;
+const HINT_MS = 4000;
 
 export interface OverviewActions {
   select(index: number): void;
   removeBlank(index: number): void;
   clearAllInk(): void;
+  /** Gibt false zurück, wenn es die letzte sichtbare Seite wäre. */
+  toggleLock(index: number): boolean;
   close(): void;
 }
 
@@ -23,6 +26,9 @@ export class Overview {
   private running = false;
   private closed = false;
   private canvases: HTMLCanvasElement[] = [];
+  private hint!: HTMLElement;
+  private hintTimer = 0;
+  private grid!: HTMLElement;
 
   constructor(
     parent: HTMLElement,
@@ -45,13 +51,17 @@ export class Overview {
     closeButton.addEventListener('click', () => actions.close());
     const headerActions = document.createElement('div');
     headerActions.className = 'pp-overview-actions';
-    if (session.hasContent()) headerActions.appendChild(this.clearAllButton());
+    this.hint = document.createElement('span');
+    this.hint.className = 'pp-overview-hint';
+    headerActions.appendChild(this.hint);
+    if (session.hasClearable()) headerActions.appendChild(this.clearAllButton());
     headerActions.appendChild(closeButton);
     header.append(title, headerActions);
     this.root.appendChild(header);
 
     const grid = document.createElement('div');
     grid.className = 'pp-overview-grid';
+    this.grid = grid;
     this.root.appendChild(grid);
 
     this.observer = new IntersectionObserver((entries) => this.onVisible(entries), {
@@ -90,17 +100,22 @@ export class Overview {
     const tile = document.createElement('div');
     tile.className = 'pp-tile';
     tile.classList.toggle('is-current', index === this.session.current);
+    tile.classList.toggle('is-locked', slide.locked);
 
     const button = document.createElement('button');
     button.className = 'pp-tile-page';
-    button.setAttribute('aria-label', `Zu Seite ${index + 1}`);
+    button.setAttribute('aria-label', slide.locked ? `Seite ${index + 1} ist gesperrt` : `Zu Seite ${index + 1}`);
     button.style.aspectRatio = slide.aspect ? `1 / ${slide.aspect}` : '';
-    button.addEventListener('click', () => this.actions.select(index));
+    button.addEventListener('click', () => {
+      if (slide.locked) this.showHint('Gesperrt. Erst das Schloss antippen, dann lässt sich die Seite zeigen.');
+      else this.actions.select(index);
+    });
+    if (slide.locked) button.innerHTML = icons.lock;
     tile.appendChild(button);
 
     const label = document.createElement('span');
     label.className = 'pp-tile-label';
-    label.textContent = slide.pdfPage === null ? `${index + 1} · leer` : String(index + 1);
+    label.textContent = slide.pdfPage === null ? `${index + 1} · leer` : slide.locked ? `${index + 1} · gesperrt` : String(index + 1);
     tile.appendChild(label);
 
     if (slide.pdfPage === null) {
@@ -108,13 +123,53 @@ export class Overview {
       remove.className = 'pp-tile-remove';
       remove.innerHTML = icons.close;
       remove.setAttribute('aria-label', 'Leere Seite entfernen');
-      remove.addEventListener('click', () => this.actions.removeBlank(index));
+      remove.addEventListener('click', () => {
+        // Eine beschriebene Seite ist ein Tafelbild. Dafür braucht es zwei Tipps.
+        if (slide.ink.strokes.length && !remove.classList.contains('is-armed')) {
+          remove.classList.add('is-armed');
+          this.showHint('Diese Seite ist beschrieben. Zum Entfernen noch einmal tippen.');
+          window.setTimeout(() => remove.classList.remove('is-armed'), CONFIRM_MS);
+          return;
+        }
+        this.actions.removeBlank(index);
+      });
       tile.appendChild(remove);
     }
 
-    (button as HTMLElement & { ppSlide?: Slide }).ppSlide = slide;
-    this.observer.observe(button);
+    if (slide.pdfPage !== null) {
+      const lock = document.createElement('button');
+      lock.className = 'pp-tile-lock';
+      lock.innerHTML = slide.locked ? icons.lockOpen : icons.lock;
+      lock.setAttribute('aria-label', slide.locked ? `Seite ${index + 1} freigeben` : `Seite ${index + 1} sperren`);
+      lock.title = slide.locked ? 'Seite freigeben' : 'Seite sperren';
+      lock.addEventListener('click', () => this.toggleLock(index, tile));
+      tile.appendChild(lock);
+    }
+
+    // Eine gesperrte Seite bekommt gar kein Vorschaubild. Die Klasse sieht die Übersicht ja mit.
+    if (!slide.locked) {
+      (button as HTMLElement & { ppSlide?: Slide }).ppSlide = slide;
+      this.observer.observe(button);
+    }
     return tile;
+  }
+
+  private toggleLock(index: number, tile: HTMLElement): void {
+    if (!this.actions.toggleLock(index)) {
+      this.showHint('Mindestens eine Seite muss sichtbar bleiben.');
+      return;
+    }
+    tile.replaceWith(this.tile(this.session.slides[index], index));
+    // Wurde die gerade gezeigte Seite gesperrt, steht jetzt eine andere im Vordergrund.
+    Array.from(this.grid.children).forEach((child, position) => {
+      child.classList.toggle('is-current', position === this.session.current);
+    });
+  }
+
+  private showHint(text: string): void {
+    this.hint.textContent = text;
+    window.clearTimeout(this.hintTimer);
+    this.hintTimer = window.setTimeout(() => (this.hint.textContent = ''), HINT_MS);
   }
 
   private onVisible(entries: IntersectionObserverEntry[]): void {
@@ -133,7 +188,8 @@ export class Overview {
     while (!this.closed && this.queue.length) {
       const { slide, holder } = this.queue.shift()!;
       try {
-        await this.renderThumbnail(slide, holder);
+        // In der Zwischenzeit gesperrt: dann auch nicht mehr zeichnen.
+        if (!slide.locked) await this.renderThumbnail(slide, holder);
       } catch {
         if (!this.closed) holder.classList.add('is-failed');
       }
@@ -182,6 +238,7 @@ export class Overview {
 
   destroy(): void {
     this.closed = true;
+    window.clearTimeout(this.hintTimer);
     this.observer.disconnect();
     this.queue = [];
     this.task?.cancel();

@@ -32,18 +32,21 @@ interface StoredStroke {
   d: number[];
 }
 
-interface StoredSlide {
+export interface StoredSlide {
   /** PDF-Seite, fehlt bei leeren Seiten */
   p?: number;
   /** Höhe durch Breite einer leeren Seite */
   a?: number;
+  /** gesperrt */
+  l?: 1;
   s?: StoredStroke[];
 }
 
 export interface InkFile {
   version: number;
   path: string;
-  current: number;
+  /** Nur in älteren Dateien. Die zuletzt gezeigte Seite merkt sich jetzt jedes Gerät selbst. */
+  current?: number;
   slides: StoredSlide[];
 }
 
@@ -84,12 +87,12 @@ export function serializeSession(session: PresentationSession, path: string): st
   const file: InkFile = {
     version: INK_FILE_VERSION,
     path,
-    current: session.current,
-    slides: session.slides.map((slide) => {
+    slides: session.slides.map((slide): StoredSlide => {
       const stored: StoredSlide = slide.pdfPage === null ? { a: slide.aspect ?? undefined } : { p: slide.pdfPage };
+      if (slide.locked) stored.l = 1;
       if (slide.ink.strokes.length) stored.s = slide.ink.strokes.map(storeStroke);
       return stored;
-    }),
+    }).concat(session.hiddenSlides),
   };
   return JSON.stringify(file);
 }
@@ -99,7 +102,7 @@ export function serializeSession(session: PresentationSession, path: string): st
  * die Sekunden nach dem Schreiben gelöscht wird, und damit wäre die Tinte zurück.
  */
 export function emptyInkFile(path: string): string {
-  const file: InkFile = { version: INK_FILE_VERSION, path, current: 0, slides: [] };
+  const file: InkFile = { version: INK_FILE_VERSION, path, slides: [] };
   return JSON.stringify(file);
 }
 
@@ -131,30 +134,99 @@ function restoreInk(slide: Slide, stored: StoredSlide, version: number): void {
   slide.ink.strokes = version < 2 ? strokes.map(cleanStroke) : strokes;
 }
 
+function normalizedHidden(stored: StoredSlide, version: number): StoredSlide {
+  if (version >= 2) return stored;
+  const strokes = (stored.s ?? []).map(restoreStroke).filter((stroke): stroke is Stroke => stroke !== null);
+  return { ...stored, s: strokes.map(cleanStroke).map(storeStroke) };
+}
+
+/**
+ * Nimmt aus einer zweiten Fassung alles auf, was der Sitzung fehlt. Es kommt nur etwas dazu, nichts geht
+ * weg: Lieber taucht ein gelöschter Strich wieder auf, als dass Tinte aus dem Unterricht verschwindet.
+ */
+export function mergeInkFile(session: PresentationSession, file: InkFile, pageCount: number): number {
+  const keyOf = (stroke: Stroke) => JSON.stringify(storeStroke(stroke));
+  const blanks = session.slides.filter((slide) => slide.pdfPage === null);
+  const blankKeys = new Set(blanks.flatMap((slide) => slide.ink.strokes.map(keyOf)));
+  let added = 0;
+  for (const stored of file.slides) {
+    if (!stored || typeof stored !== 'object') continue;
+    const incoming = new PresentationSession(0).appendSlide(null, null);
+    restoreInk(incoming, stored, file.version);
+    if (typeof stored.p === 'number') {
+      const slide = session.slides.find((entry) => entry.pdfPage === stored.p);
+      if (!slide) {
+        const keys = new Set(session.hiddenSlides.flatMap((entry) => (entry.s ?? []).map((item) => JSON.stringify(item))));
+        const fresh = incoming.ink.strokes.map(storeStroke).filter((item) => !keys.has(JSON.stringify(item)));
+        if (fresh.length && stored.p > pageCount) {
+          session.hiddenSlides.push({ p: stored.p, s: fresh });
+          added += fresh.length;
+        }
+        continue;
+      }
+      if (stored.l === 1 && session.slides.some((entry) => entry !== slide && !entry.locked)) slide.locked = true;
+      const known = new Set(slide.ink.strokes.map(keyOf));
+      const fresh = incoming.ink.strokes.filter((stroke) => !known.has(keyOf(stroke)));
+      slide.ink.strokes = [...slide.ink.strokes, ...fresh];
+      added += fresh.length;
+    } else {
+      const fresh = incoming.ink.strokes.filter((stroke) => !blankKeys.has(keyOf(stroke)));
+      if (fresh.length) {
+        const slide = session.appendSlide(null, typeof stored.a === 'number' && stored.a > 0 ? stored.a : 0.75);
+        slide.ink.strokes = fresh;
+        fresh.forEach((stroke) => blankKeys.add(keyOf(stroke)));
+        added += fresh.length;
+      }
+    }
+  }
+  return added;
+}
+
 /**
  * Baut die Sitzung aus der Datei. Das PDF hat Vorrang: Jede seiner Seiten kommt genau
  * einmal vor, auch wenn es inzwischen mehr oder weniger Seiten hat als beim Speichern.
  */
 export function restoreSession(file: InkFile, pageCount: number): { session: PresentationSession; droppedInk: boolean } {
   const session = new PresentationSession(0);
-  const seen = new Set<number>();
+  const pages = new Map<number, StoredSlide>();
+  // Eine leere Seite gehört hinter die PDF-Seite, hinter der sie eingefügt wurde.
+  const blanksAfter = new Map<number, StoredSlide[]>();
   let droppedInk = false;
+  let lastPage = 0;
   for (const stored of file.slides) {
     if (typeof stored?.p === 'number') {
-      if (stored.p < 1 || stored.p > pageCount || seen.has(stored.p)) {
-        if (stored.s?.length) droppedInk = true;
+      if (stored.p < 1 || stored.p > pageCount || pages.has(stored.p)) {
+        // Das PDF ist gerade kürzer, vielleicht nur ein Teilexport. Die Tinte reist unsichtbar mit.
+        if (stored.s?.length) {
+          droppedInk = true;
+          session.hiddenSlides.push(normalizedHidden(stored, file.version));
+        }
         continue;
       }
-      seen.add(stored.p);
-      restoreInk(session.appendSlide(stored.p, null), stored, file.version);
+      pages.set(stored.p, stored);
+      lastPage = stored.p;
     } else if (stored && typeof stored === 'object') {
-      restoreInk(session.appendSlide(null, typeof stored.a === 'number' && stored.a > 0 ? stored.a : 0.75), stored, file.version);
+      blanksAfter.set(lastPage, [...(blanksAfter.get(lastPage) ?? []), stored]);
     }
   }
+  const appendBlanks = (page: number) => {
+    for (const stored of blanksAfter.get(page) ?? []) {
+      restoreInk(session.appendSlide(null, typeof stored.a === 'number' && stored.a > 0 ? stored.a : 0.75), stored, file.version);
+    }
+  };
+  appendBlanks(0);
   for (let page = 1; page <= pageCount; page++) {
-    if (!seen.has(page)) session.appendSlide(page, null);
+    const slide = session.appendSlide(page, null);
+    const stored = pages.get(page);
+    if (stored) {
+      slide.locked = stored.l === 1;
+      restoreInk(slide, stored, file.version);
+    }
+    appendBlanks(page);
   }
-  const current = Number.isInteger(file.current) ? file.current : 0;
+  // Kann bei einem gekürzten PDF passieren. Ganz ohne sichtbare Seite ließe sich nichts mehr zeigen.
+  if (session.slides.every((slide) => slide.locked)) session.slides.forEach((slide) => (slide.locked = false));
+  const current = Number.isInteger(file.current) ? (file.current as number) : 0;
   session.current = Math.max(0, Math.min(session.slides.length - 1, current));
   return { session, droppedInk };
 }

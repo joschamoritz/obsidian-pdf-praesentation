@@ -85,6 +85,7 @@
 /* Griff und Leiste */
 
 .pp-root .pp-handle {
+  z-index: 3;
   position: absolute;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   left: 50%;
@@ -109,6 +110,7 @@
 }
 
 .pp-dock {
+  z-index: 3;
   position: absolute;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   left: 12px;
@@ -345,9 +347,110 @@
   cursor: pointer;
 }
 
+.pp-chips-small {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.pp-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pp-stepper-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-timer-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pp-root .pp-timer-controls .pp-text-button {
+  flex: 1;
+  justify-content: center;
+  height: 44px;
+  font-size: 15px;
+}
+
+.pp-root .pp-text-button.is-primary {
+  background: #f2f2f2;
+  color: #1c1c1e;
+  font-weight: 600;
+}
+
+.pp-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: #a1a1a6;
+}
+
+/* Timer über der Folie */
+
+.pp-root .pp-timer {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  padding: 0.12em 0.42em !important;
+  transform: translate(-50%, -50%);
+  border-radius: 0.3em;
+  background: rgba(20, 20, 22, 0.88);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.pp-root .pp-timer.is-visible {
+  display: block;
+}
+
+.pp-root .pp-timer[data-size="small"] {
+  font-size: 22px;
+}
+
+.pp-root .pp-timer[data-size="medium"] {
+  font-size: clamp(32px, 5vw, 64px);
+}
+
+.pp-root .pp-timer[data-size="large"] {
+  font-size: clamp(56px, 11vw, 150px);
+}
+
+.pp-root .pp-timer[data-size="huge"] {
+  font-size: 24vw;
+}
+
+.pp-root .pp-timer.is-paused {
+  opacity: 0.65;
+}
+
+.pp-root .pp-timer[data-phase="warning"] {
+  background: rgba(190, 95, 0, 0.94);
+}
+
+.pp-root .pp-timer[data-phase="finished"] {
+  background: rgba(190, 30, 30, 0.96);
+  animation: pp-timer-end 0.7s ease-in-out 3;
+}
+
+@keyframes pp-timer-end {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* Seitenübersicht */
 
 .pp-overview {
+  z-index: 4;
   position: absolute;
   inset: 0;
   overflow-y: auto;
@@ -451,6 +554,51 @@
   border-radius: 50%;
   background: #3a3a3c;
   color: #f2f2f2;
+}
+
+.pp-root .pp-tile-lock {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #3a3a3c;
+  color: #f2f2f2;
+}
+
+.pp-tile-lock svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pp-root .pp-tile.is-locked .pp-tile-lock {
+  background: #f2f2f2;
+  color: #1c1c1e;
+}
+
+/* Nichts von der Seite zeigen: Die Übersicht ist per AirPlay für alle sichtbar. */
+.pp-root .pp-tile.is-locked .pp-tile-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  background: repeating-linear-gradient(45deg, #2c2c2e, #2c2c2e 8px, #3a3a3c 8px, #3a3a3c 16px);
+  color: #c7c7cc;
+}
+
+.pp-tile.is-locked .pp-tile-page svg {
+  width: 28px;
+  height: 28px;
+}
+
+.pp-overview-hint {
+  font-size: 13px;
+  font-weight: 400;
+  color: #ffb65c;
 }
 
 .pp-tile-remove svg {

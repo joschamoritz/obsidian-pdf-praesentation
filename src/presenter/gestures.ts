@@ -95,6 +95,8 @@ export class GestureRouter<E extends PointerInput> {
     // Fingergesten gelten dann als Handballen und lösen nichts mehr aus.
     if (this.mode === 'pinch' || (this.mode === 'one-finger' && this.moved)) this.handlers.gestureEnd();
     if (this.mode === 'ink' && this.inkPointerType === 'touch') this.handlers.inkCancel();
+    // Fehlte das Absetzen des vorigen Strichs, bleibt er erhalten, statt vom neuen ersetzt zu werden.
+    else if (this.mode === 'ink') this.handlers.inkEnd(null);
     for (const id of this.touches.keys()) this.ignored.add(id);
     this.touches.clear();
     this.mode = 'idle';

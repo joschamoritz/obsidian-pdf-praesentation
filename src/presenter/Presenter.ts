@@ -20,12 +20,14 @@ import {
   type PresentationSession,
   type Slide,
 } from './session';
+import { TimerWidget } from './timer';
 import { Toolbar } from './toolbar';
 import type { PdfDocument, Tool } from './types';
 import {
   clampView,
   fitSheet,
   keyZoomFactor,
+  medianColor,
   rasterWidth,
   snapSize,
   snapView,
@@ -64,6 +66,8 @@ export interface PresenterOptions {
   session: PresentationSession;
   /** Tinte oder Seiten haben sich geändert */
   onChange?(): void;
+  /** Eine andere Seite wird gezeigt */
+  onPageChange?(index: number): void;
   /** Das Gerät schickt die App in den Hintergrund, und iPadOS kann sie danach jederzeit beenden. */
   onHidden?(): void;
   onClose(): void;
@@ -85,6 +89,10 @@ export class Presenter {
   private inkFrame = 0;
   private liveFrame = 0;
   private toolbar: Toolbar;
+  private timer: TimerWidget;
+  /** Randfarbe je PDF-Seite. Sie auszulesen kostet auf dem iPad etwas. */
+  private edgeColors = new Map<number, string>();
+  private edgeColor = '#fff';
   private laser: Laser;
   private router: GestureRouter<InkPointerEvent>;
   private renderer: PageRenderer;
@@ -147,6 +155,18 @@ export class Presenter {
       fingerDraws: () => this.preferences.fingerDraws,
     });
 
+    this.timer = new TimerWidget(this.root, {
+      minutes: this.preferences.timerMinutes,
+      size: this.preferences.timerSize,
+      x: this.preferences.timerX,
+      y: this.preferences.timerY,
+      isInking: () => this.inkRect !== null,
+      onStatusChange: () => {
+        if (this.toolbar) this.syncToolbar();
+      },
+      onMoved: (timerX, timerY) => this.changePreferences({ timerX, timerY }),
+    });
+
     this.toolbar = new Toolbar(this.root, {
       selectTool: (tool) => this.selectTool(tool),
       selectColor: (color) => this.selectColor(color),
@@ -160,6 +180,23 @@ export class Presenter {
       overview: () => this.openOverview(),
       insertBlank: () => this.insertBlank(),
       close: () => this.close(),
+      timerSetMinutes: (minutes) => {
+        this.timer.timer.setMinutes(minutes);
+        this.timerChanged();
+      },
+      timerAdjust: (minutes) => {
+        this.timer.timer.adjust(minutes);
+        this.timerChanged();
+      },
+      timerStartPause: () => {
+        this.timer.timer.toggle();
+        this.timerChanged();
+      },
+      timerReset: () => {
+        this.timer.timer.reset();
+        this.timerChanged();
+      },
+      timerPreview: (on) => this.timer.setPreview(on),
     });
 
     this.bindInput();
@@ -234,8 +271,8 @@ export class Presenter {
     else if (keyZoomFactor(key) !== null) this.onZoomKey(keyZoomFactor(key) as number);
     else if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' || key === ' ') this.step(1);
     else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') this.step(-1);
-    else if (key === 'Home') void this.goTo(0);
-    else if (key === 'End') void this.goTo(this.session.slides.length - 1);
+    else if (key === 'Home') void this.goTo(this.session.firstVisible());
+    else if (key === 'End') void this.goTo(this.session.lastVisible());
     else handled = false;
     // Solange die Präsentation offen ist, gehören die Tasten ihr, auch die Hotkeys von Obsidian.
     event.stopPropagation();
@@ -584,8 +621,45 @@ export class Presenter {
   private changePreferences(patch: Partial<Preferences>): void {
     Object.assign(this.preferences, patch);
     savePreferences(this.preferences);
+    if (patch.timerSize) this.timer.setSize(patch.timerSize);
+    if (patch.edgeMode) this.applyEdge();
     this.syncToolbar();
     if ('toolbarPinned' in patch) this.onResize();
+  }
+
+  private timerChanged(): void {
+    if (this.timer.timer.status === 'idle') this.preferences.timerMinutes = this.timer.timer.minutes;
+    savePreferences(this.preferences);
+    this.timer.render();
+    this.syncToolbar();
+  }
+
+  /** Die Fläche um die Folie nimmt ihre Randfarbe an, damit sie am Board nicht als schwarzer Balken auffällt. */
+  private applyEdge(): void {
+    this.root.style.background = this.preferences.edgeMode === 'page' ? this.edgeColor : '';
+  }
+
+  private updateEdgeColor(pageNumber: number | null, canvas: HTMLCanvasElement | null): void {
+    if (pageNumber === null || !canvas) {
+      this.edgeColor = '#fff';
+    } else {
+      let color = this.edgeColors.get(pageNumber);
+      if (!color) {
+        const context = canvas.getContext('2d');
+        if (!context || canvas.width < 8 || canvas.height < 8) return;
+        const inset = 3;
+        const corners = [
+          [inset, inset],
+          [canvas.width - inset, inset],
+          [inset, canvas.height - inset],
+          [canvas.width - inset, canvas.height - inset],
+        ];
+        color = medianColor(corners.map(([x, y]) => Array.from(context.getImageData(x, y, 1, 1).data)));
+        this.edgeColors.set(pageNumber, color);
+      }
+      this.edgeColor = color;
+    }
+    this.applyEdge();
   }
 
   private syncToolbar(): void {
@@ -595,24 +669,32 @@ export class Presenter {
       canUndo: ink.canUndo,
       canRedo: ink.canRedo,
       canClear: ink.strokes.length > 0,
-      index: this.session.current,
-      total: this.session.slides.length,
+      ...this.session.visiblePosition(this.session.current),
+      hasPrevious: this.session.nextVisible(this.session.current, -1) !== null,
+      hasNext: this.session.nextVisible(this.session.current, 1) !== null,
       sheetWidth: this.sheetSize.width,
+      timerStatus: this.timer.timer.status,
+      timerMinutes: this.timer.timer.minutes,
     });
   }
 
   // ---------- Seiten ----------
 
   private step(direction: 1 | -1): void {
-    void this.goTo(this.session.current + direction);
+    const target = this.session.nextVisible(this.session.current, direction);
+    if (target !== null) void this.goTo(target);
   }
 
   private async goTo(index: number): Promise<void> {
     if (this.closed) return;
+    // Ein Presenter-Klick mitten im Strich: Der Strich gehört noch auf die alte Seite.
+    if (this.inkRect) this.inkEnd(null);
     this.clearDetail();
-    const target = Math.max(0, Math.min(this.session.slides.length - 1, index));
+    // Auch ein Link auf eine gesperrte Seite zeigt sie nicht.
+    const target = this.session.nearestVisible(Math.max(0, Math.min(this.session.slides.length - 1, index)));
     const navigation = ++this.navigation;
     this.session.current = target;
+    this.options.onPageChange?.(target);
     const slide = this.slide;
     this.pageSlot.textContent = '';
 
@@ -642,16 +724,24 @@ export class Presenter {
 
   private rasterCurrent(navigation: number): void {
     const slide = this.slide;
-    if (slide.pdfPage === null) return;
+    if (slide.pdfPage === null) {
+      this.updateEdgeColor(null, null);
+      return;
+    }
     const pageNumber = slide.pdfPage;
     // Immer die ganze Seite in Bildschirmauflösung. Im Zoom kommt der scharfe Ausschnitt dazu.
     const width = rasterWidth(this.sheetSize.width, this.aspect, this.pixelRatio, MAX_PAGE_PIXELS);
     const cached = this.renderer.cached(pageNumber);
-    if (cached) this.pageSlot.replaceChildren(cached);
+    if (cached) {
+      this.pageSlot.replaceChildren(cached);
+      this.updateEdgeColor(pageNumber, cached);
+    }
     this.renderer
       .render(pageNumber, width)
       .then((canvas) => {
-        if (navigation === this.navigation && !this.closed) this.pageSlot.replaceChildren(canvas);
+        if (navigation !== this.navigation || this.closed) return;
+        this.pageSlot.replaceChildren(canvas);
+        this.updateEdgeColor(pageNumber, canvas);
       })
       .catch((error: { name?: string }) => {
         if (error?.name === 'RenderingCancelledException' || navigation !== this.navigation || this.closed) return;
@@ -663,7 +753,9 @@ export class Presenter {
   private preloadAround(index: number): void {
     const keep = new Set<number>();
     const scale = this.pixelRatio;
-    for (const neighbour of [index, index + 1, index - 1]) {
+    const neighbours = [index, this.session.nextVisible(index, 1), this.session.nextVisible(index, -1)];
+    for (const neighbour of neighbours) {
+      if (neighbour === null) continue;
       const slide = this.session.slides[neighbour];
       if (slide?.pdfPage == null) continue;
       keep.add(slide.pdfPage);
@@ -824,6 +916,14 @@ export class Presenter {
         this.closeOverview();
         this.openOverview();
       },
+      toggleLock: (index) => {
+        const slide = this.session.slides[index];
+        if (!this.session.setLocked(index, !slide.locked)) return false;
+        this.options.onChange?.();
+        if (index === this.session.current && slide.locked) void this.goTo(index);
+        else this.syncToolbar();
+        return true;
+      },
       close: () => this.closeOverview(),
     });
   }
@@ -857,6 +957,7 @@ export class Presenter {
 
   close(): void {
     if (this.closed) return;
+    if (this.inkRect) this.inkEnd(null);
     this.closed = true;
     this.navigation++;
     window.clearTimeout(this.rerasterTimer);
@@ -865,7 +966,9 @@ export class Presenter {
     this.clearDetail();
     this.closeOverview();
     this.laser.stop();
+    for (const canvas of [this.markerLayer, this.inkLayer, this.transientLayer]) releaseCanvas(canvas);
     this.toolbar.destroy();
+    this.timer.destroy();
     this.resizeObserver.disconnect();
     document.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);

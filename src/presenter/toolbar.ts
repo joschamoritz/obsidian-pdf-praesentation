@@ -6,10 +6,12 @@ import {
   PEN_TYPES,
   sliderToWidth,
   widthToSlider,
+  type EdgeMode,
   type EraserMode,
   type Preferences,
   type WidthRange,
 } from './session';
+import type { TimerSize, TimerStatus } from './timer';
 import type { Tool } from './types';
 
 export interface ToolbarActions {
@@ -25,17 +27,30 @@ export interface ToolbarActions {
   overview(): void;
   insertBlank(): void;
   close(): void;
+  timerSetMinutes(minutes: number): void;
+  timerAdjust(minutes: number): void;
+  timerStartPause(): void;
+  timerReset(): void;
+  /** Das Timerfeld ist offen: Die Anzeige zeigt schon Größe und Lage. */
+  timerPreview(on: boolean): void;
 }
+
+type PanelMode = 'tool' | 'timer' | 'view';
 
 export interface ToolbarState {
   preferences: Preferences;
   canUndo: boolean;
   canRedo: boolean;
   canClear: boolean;
-  index: number;
+  /** Position unter den sichtbaren Seiten, ab 1 */
+  position: number;
   total: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
   /** Breite der Seite am Bildschirm. Die Vorschau zeigt den Strich so groß, wie er wirklich wird. */
   sheetWidth: number;
+  timerStatus: TimerStatus;
+  timerMinutes: number;
 }
 
 const AUTO_HIDE_MS = 5000;
@@ -48,6 +63,15 @@ const TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'marker', icon: 'highlighter', label: 'Marker' },
   { tool: 'shape', icon: 'shapes', label: 'Formen' },
   { tool: 'eraser', icon: 'eraser', label: 'Radierer' },
+];
+
+const TIMER_MINUTES = [1, 2, 3, 5, 10, 15, 20, 30];
+
+const TIMER_SIZES: { size: TimerSize; label: string }[] = [
+  { size: 'small', label: 'Klein' },
+  { size: 'medium', label: 'Mittel' },
+  { size: 'large', label: 'Groß' },
+  { size: 'huge', label: 'Riesig' },
 ];
 
 const SHAPES: { type: ShapeType; icon: IconName; label: string }[] = [
@@ -115,6 +139,9 @@ export class Toolbar {
   private nextButton: HTMLButtonElement;
   private pageLabel: HTMLElement;
   private pinButton: HTMLButtonElement;
+  private timerButton: HTMLButtonElement;
+  private viewButton: HTMLButtonElement;
+  private panelMode: PanelMode = 'tool';
   private pinned = false;
   private hideTimer = 0;
   private visible = false;
@@ -141,7 +168,7 @@ export class Toolbar {
     }
 
     this.colorGroup = element('div', 'pp-group', this.bar);
-    this.optionsButton = this.iconButton(this.colorGroup, 'sliders', 'Werkzeug einstellen', () => this.togglePanel());
+    this.optionsButton = this.iconButton(this.colorGroup, 'sliders', 'Werkzeug einstellen', () => this.togglePanel('tool'));
 
     const edit = element('div', 'pp-group', this.bar);
     this.undoButton = this.iconButton(edit, 'undo', 'Rückgängig', () => actions.undo());
@@ -159,6 +186,8 @@ export class Toolbar {
     this.iconButton(pages, 'filePlus', 'Leere Seite einfügen', () => actions.insertBlank());
 
     const end = element('div', 'pp-group', this.bar);
+    this.timerButton = this.iconButton(end, 'timer', 'Timer', () => this.togglePanel('timer'));
+    this.viewButton = this.iconButton(end, 'monitor', 'Rand um die Folie', () => this.togglePanel('view'));
     this.pinButton = this.iconButton(end, 'pin', 'Werkzeugleiste fixieren', () =>
       actions.change({ toolbarPinned: !this.state?.preferences.toolbarPinned }),
     );
@@ -178,9 +207,11 @@ export class Toolbar {
   /** Erster Tipp wählt das Werkzeug, der zweite öffnet seine Einstellungen. */
   private onToolTap(tool: Tool): void {
     if (this.state?.preferences.tool === tool) {
-      if (tool !== 'laser') this.togglePanel();
+      if (tool !== 'laser') this.togglePanel('tool');
       return;
     }
+    // Ist gerade ein Feld offen, zeigt es danach die Einstellungen des neuen Werkzeugs.
+    if (this.panelMode !== 'tool') this.setPanelOpen(false);
     this.actions.selectTool(tool);
   }
 
@@ -198,11 +229,13 @@ export class Toolbar {
     this.clearButton.disabled = !state.canClear;
     this.fingerButton.classList.toggle('is-active', preferences.fingerDraws);
     this.fingerButton.setAttribute('aria-pressed', String(preferences.fingerDraws));
-    this.previousButton.disabled = state.index <= 0;
-    this.nextButton.disabled = state.index >= state.total - 1;
-    this.pageLabel.textContent = `${state.index + 1} / ${state.total}`;
+    this.previousButton.disabled = !state.hasPrevious;
+    this.nextButton.disabled = !state.hasNext;
+    this.pageLabel.textContent = `${state.position} / ${state.total}`;
     this.applyPinned(preferences.toolbarPinned);
-    if (preferences.tool === 'laser') this.setPanelOpen(false);
+    this.timerButton.classList.toggle('is-active', state.timerStatus === 'running' || state.timerStatus === 'paused');
+    this.viewButton.classList.toggle('is-active', this.panelOpen && this.panelMode === 'view');
+    if (preferences.tool === 'laser' && this.panelMode === 'tool') this.setPanelOpen(false);
     this.renderPanel();
     this.refreshPanelValues?.();
   }
@@ -267,8 +300,11 @@ export class Toolbar {
 
   // ---------- Einstellungsfeld ----------
 
-  private togglePanel(): void {
-    this.setPanelOpen(!this.panelOpen);
+  private togglePanel(mode: PanelMode): void {
+    const closing = this.panelOpen && this.panelMode === mode;
+    this.setPanelOpen(false);
+    this.panelMode = mode;
+    if (!closing) this.setPanelOpen(true);
     this.renderPanel();
     this.refreshPanelValues?.();
     this.restartTimer();
@@ -278,6 +314,7 @@ export class Toolbar {
     this.panelOpen = open;
     this.panel.classList.toggle('is-open', open);
     if (!open) this.panelKey = '';
+    this.actions.timerPreview(open && this.panelMode === 'timer');
   }
 
   /** Baut das Feld nur neu, wenn sich sein Aufbau ändert. Sonst risse jeder Reglerschritt den Regler unter dem Finger weg. */
@@ -285,6 +322,7 @@ export class Toolbar {
     if (!this.panelOpen || !this.state) return;
     const p = this.state.preferences;
     const key = JSON.stringify([
+      this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode,
       p.tool, p.penType, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
       p.customPen, p.customMarker, this.state.sheetWidth,
     ]);
@@ -292,10 +330,59 @@ export class Toolbar {
     this.panelKey = key;
     this.panel.replaceChildren();
     this.refreshPanelValues = null;
-    if (p.tool === 'pen') this.buildPenPanel(p);
+    if (this.panelMode === 'timer') this.buildTimerPanel(p);
+    else if (this.panelMode === 'view') this.buildViewPanel(p);
+    else if (p.tool === 'pen') this.buildPenPanel(p);
     else if (p.tool === 'marker') this.buildMarkerPanel(p);
     else if (p.tool === 'shape') this.buildShapePanel(p);
     else if (p.tool === 'eraser') this.buildEraserPanel(p);
+  }
+
+  private buildTimerPanel(p: Preferences): void {
+    const state = this.state as ToolbarState;
+    const durations = element('div', 'pp-chips pp-chips-small', this.section('Dauer in Minuten'));
+    for (const minutes of TIMER_MINUTES) {
+      this.chip(durations, String(minutes), state.timerMinutes === minutes, () => this.actions.timerSetMinutes(minutes));
+    }
+    const stepper = element('div', 'pp-stepper', this.panel.lastElementChild as HTMLElement);
+    this.textButton(stepper, '− 1 Min.', () => this.actions.timerAdjust(-1));
+    element('span', 'pp-stepper-value', stepper).textContent = `${state.timerMinutes} Min.`;
+    this.textButton(stepper, '+ 1 Min.', () => this.actions.timerAdjust(1));
+
+    const sizes = element('div', 'pp-chips', this.section('Größe'));
+    for (const { size, label } of TIMER_SIZES) {
+      this.chip(sizes, label, p.timerSize === size, () => this.actions.change({ timerSize: size }));
+    }
+
+    const controls = element('div', 'pp-timer-controls', this.panel);
+    const running = state.timerStatus === 'running';
+    const label = running ? 'Anhalten' : state.timerStatus === 'paused' ? 'Fortsetzen' : 'Starten';
+    this.textButton(controls, label, () => {
+      this.actions.timerStartPause();
+      // Sobald er läuft, soll die Klasse die Zeit sehen und nicht dieses Feld.
+      if (!running) this.collapse();
+    }).classList.add('is-primary');
+    if (state.timerStatus !== 'idle') this.textButton(controls, 'Zurücksetzen', () => this.actions.timerReset());
+    const hint = element('div', 'pp-hint', this.panel);
+    hint.textContent = 'Die Anzeige lässt sich mit dem Finger verschieben. Ein Tipp darauf hält sie an.';
+  }
+
+  private buildViewPanel(p: Preferences): void {
+    const section = this.section('Fläche um die Folie');
+    const modes = element('div', 'pp-chips', section);
+    const select = (edgeMode: EdgeMode) => () => this.actions.change({ edgeMode });
+    this.chip(modes, 'Wie die Folie', p.edgeMode === 'page', select('page'));
+    this.chip(modes, 'Schwarz', p.edgeMode === 'black', select('black'));
+    const hint = element('div', 'pp-hint', this.panel);
+    hint.textContent =
+      'Das gilt für die Flächen auf dem iPad. Die Balken links und rechts am Board kommen von der AirPlay-Spiegelung. Dagegen hilft höchstens eine Zoom-Einstellung am Board.';
+  }
+
+  private textButton(parent: HTMLElement, label: string, action: () => void): HTMLButtonElement {
+    const button = element('button', 'pp-text-button', parent);
+    button.textContent = label;
+    button.addEventListener('click', action);
+    return button;
   }
 
   private section(title: string): HTMLElement {

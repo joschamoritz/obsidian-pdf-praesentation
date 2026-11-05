@@ -17,6 +17,7 @@ export interface PdfPage {
     canvasContext: CanvasRenderingContext2D;
     viewport: PdfViewport;
   }): PdfRenderTask;
+  cleanup?(): unknown;
 }
 
 export interface PdfDocument {

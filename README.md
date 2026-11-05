@@ -16,7 +16,7 @@ Danach in Obsidian unter *Einstellungen → Community-Plugins* einschalten. Mit 
 
 ## Bedienung
 
-**Starten:** Knopf in der Kopfzeile eines geöffneten PDFs, kleiner Knopf hinter PDF-Links in der Leseansicht, Kontextmenü im Dateibaum, Befehl „PDF auswählen und präsentieren“ oder `obsidian://pdf-praesentieren?file=Pfad.pdf&page=3`.
+**Starten:** Knopf in der Kopfzeile eines geöffneten PDFs, kleiner Knopf hinter PDF-Links und PDF-Pfaden in Backticks in der Leseansicht, Kontextmenü im Dateibaum, Befehl „PDF auswählen und präsentieren“ oder `obsidian://pdf-praesentieren?file=Pfad.pdf&page=3`.
 
 | Eingabe | Wirkung |
 |---|---|
@@ -44,27 +44,42 @@ Die vier Farben in der Leiste sind Schnellfarben: Eine neu gewählte Farbe erset
 
 Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblättert wird dann über die Leiste, gezoomt weiter mit zwei Fingern.
 
+**Seiten sperren:** In der Seitenübersicht sperrt das Schloss eine Seite, etwa eine Lösung im selben PDF. Blättern überspringt sie, die Übersicht zeigt kein Vorschaubild und die Seitenzahl unten zählt sie nicht mit. Gezeigt werden kann sie erst nach dem Freigeben. Die Sperre wird mit der Tinte gespeichert und bleibt auch nach „Alle Tinte löschen“ stehen.
+
+**Timer:** Das Uhr-Symbol öffnet die Einstellung für Dauer und Größe (klein bis riesig). Die Anzeige liegt über der Folie, lässt sich mit dem Finger verschieben, ein Tipp hält sie an. In der letzten Minute wird sie orange, am Ende rot und blinkt dreimal. „+ 1 Min.“ geht auch, während sie läuft.
+
+**Rand:** Das Bildschirm-Symbol stellt die Fläche um die Folie auf ihre Randfarbe oder auf Schwarz. Die Balken links und rechts am Board kommen von der Spiegelung und lassen sich aus dem Plugin nicht ändern.
+
 Die Stecknadel fixiert die Leiste: Sie bleibt stehen, und die Seite rückt so weit, dass die Leiste nichts verdeckt. Die Einstellung gilt je Gerät.
 
 Die Werkzeugwahl liegt je Gerät im localStorage.
 
 ## Tinte
 
-Tinte, leere Seiten und die zuletzt gezeigte Seite werden automatisch gespeichert: zwei Sekunden nach dem letzten Strich, beim Beenden und wenn die App in den Hintergrund geht. Das PDF selbst bleibt immer unverändert. „Alle Tinte löschen“ in der Seitenübersicht macht ein PDF wieder sauber für die nächste Lerngruppe und entfernt auch eingefügte leere Seiten.
+Tinte, leere Seiten und Sperren werden automatisch gespeichert: zwei Sekunden nach dem letzten Strich, spätestens nach 20 Sekunden, beim Beenden und wenn die App in den Hintergrund geht. Das PDF selbst bleibt immer unverändert. Die zuletzt gezeigte Seite merkt sich jedes Gerät selbst. „Alle Tinte löschen“ in der Seitenübersicht macht ein PDF wieder sauber für die nächste Lerngruppe und entfernt auch eingefügte leere Seiten.
 
 Die Dateien liegen in `.obsidian/plugins/pdf-praesentation/tinte/` und heißen `<Pfad-Hash>.<Inhalts-Hash>.json`. Sie reisen per iCloud mit, tauchen aber nicht zwischen dem Material auf. Wer das Plugin deinstalliert, löscht auch die Tinte.
 
+Grundsatz: Tinte wird nie überschrieben, ohne dass ihr Stand bekannt ist.
+
 | Fall | Verhalten |
 |---|---|
-| PDF verschoben oder umbenannt, auch außerhalb von Obsidian | Die Tinte findet sich über den Inhalts-Hash wieder |
-| inhaltsgleiche Kopie, das Original liegt noch dort | Die Kopie startet ohne Tinte |
-| PDF neu erzeugt | Die Tinte bleibt, mit Hinweis, dass sie verrutscht sein kann |
-| PDF hat weniger Seiten als vorher | Tinte auf den fehlenden Seiten fällt weg, mit Hinweis |
-| Datei gerade nicht lesbar (etwa noch nicht aus iCloud geladen) | Hinweis, und es wird nichts gespeichert, damit nichts überschrieben wird |
-| Datei beschädigt | wird zu `*.defekt` umbenannt, es geht ohne Tinte weiter |
-| Schreiben schlägt fehl | Hinweis, die Tinte bleibt bis zum Beenden von Obsidian im Speicher |
+| Datei wurde seit dem Laden von einem anderen Gerät geändert | Sie wird nicht überschrieben. Die eigene Fassung geht in eine Nebendatei, beim nächsten Öffnen wird beides zusammengeführt |
+| iCloud-Konfliktkopie (`abc.def 2.json`) | wird beim Öffnen zusammengeführt und danach beiseitegelegt (`.uebernommen-…`) |
+| Zusammenführen | Es kommt nur dazu, nichts geht weg. Ein gelöschter Strich kann deshalb wieder auftauchen |
+| PDF in Obsidian verschoben oder umbenannt | Die Tinte zieht sofort mit um |
+| PDF außerhalb von Obsidian verschoben | Die Tinte findet sich über den Inhalts-Hash wieder. Bei mehreren Kandidaten gewinnt der ähnlichste Pfad, bei Gleichstand startet das PDF leer, und die anderen bleiben unberührt |
+| Inhaltsgleiche Kopie, das Original liegt noch dort | Die Kopie startet ohne Tinte |
+| PDF neu erzeugt | Die Tinte bleibt, mit dem Hinweis, dass sie verrutscht sein kann |
+| PDF hat weniger Seiten als vorher | Die Tinte der fehlenden Seiten reist unsichtbar mit und kommt zurück, wenn die Seiten wieder da sind |
+| Datei gerade nicht lesbar, auch iCloud-Platzhalter | Hinweis, und es wird nichts gespeichert, damit nichts überschrieben wird. Tinte aus der Sitzung bleibt bis zum Beenden von Obsidian im Speicher |
+| Datei beschädigt | wird zu `.defekt-…` umbenannt. Geladen wird die Sicherung vom Beginn der letzten Sitzung (`.sicherung`) |
+| Schreiben schlägt fehl | Hinweis, die Tinte bleibt bis zum Beenden von Obsidian im Speicher und wird beim nächsten Öffnen nachgeschrieben |
+| Beschriebene leere Seite entfernen | braucht zwei Tipps |
 
 Keine Temp-Datei mit Umbenennen und kein Löschen nach dem Leeren: iCloud erzeugt beim Umbenennen Konfliktkopien und stellt Dateien wieder her, die kurz nach dem Schreiben gelöscht werden. Deshalb wird in die Datei selbst geschrieben, und eine geleerte Datei bleibt als leere Datei stehen.
+
+**Grenze:** Wird ein PDF außerhalb von Obsidian umbenannt und entsteht ein neues unter dem alten Namen, wandert die Tinte zum neuen PDF, mit dem Hinweis auf die Änderung. Das Plugin sieht nicht, dass das alte PDF jetzt woanders liegt.
 
 ## Wie gezeichnet wird
 

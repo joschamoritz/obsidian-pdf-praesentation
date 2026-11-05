@@ -1,4 +1,6 @@
 import { PageInk, type PenType, type ShapeType } from './ink';
+import type { StoredSlide } from './inkFile';
+import type { TimerSize } from './timer';
 import type { Tool } from './types';
 
 /** Eine Folie ist eine PDF-Seite oder eine eingefügte leere Seite. */
@@ -8,11 +10,15 @@ export interface Slide {
   /** Höhe durch Breite, nur bei leeren Seiten fest */
   aspect: number | null;
   ink: PageInk;
+  /** Erscheint nicht beim Blättern und ist in der Übersicht verdeckt, etwa eine Lösungsseite */
+  locked: boolean;
 }
 
 /** Was zwischen zwei Präsentationen desselben PDFs erhalten bleibt. */
 export class PresentationSession {
   slides: Slide[] = [];
+  /** Tinte auf Seiten, die das PDF gerade nicht hat. Sie bleibt erhalten, bis die Seiten zurückkommen. */
+  hiddenSlides: StoredSlide[] = [];
   current = 0;
   private nextId = 1;
 
@@ -21,14 +27,57 @@ export class PresentationSession {
   }
 
   appendSlide(pdfPage: number | null, aspect: number | null): Slide {
-    const slide: Slide = { id: this.nextId++, pdfPage, aspect, ink: new PageInk() };
+    const slide: Slide = { id: this.nextId++, pdfPage, aspect, ink: new PageInk(), locked: false };
     this.slides.push(slide);
     return slide;
   }
 
   /** Gibt es etwas, das sich aufzuheben lohnt? */
   hasContent(): boolean {
-    return this.slides.some((slide) => slide.pdfPage === null || slide.ink.strokes.length > 0);
+    return this.hiddenSlides.length > 0 || this.slides.some((slide) => slide.pdfPage === null || slide.locked || slide.ink.strokes.length > 0);
+  }
+
+  /** Gibt es etwas, das „Alle Tinte löschen“ entfernen würde? Sperren bleiben dabei stehen. */
+  hasClearable(): boolean {
+    return this.hiddenSlides.length > 0 || this.slides.some((slide) => slide.pdfPage === null || slide.ink.strokes.length > 0);
+  }
+
+  /** Sperrt eine PDF-Seite oder gibt sie frei. Mindestens eine Seite muss sichtbar bleiben. */
+  setLocked(index: number, locked: boolean): boolean {
+    const slide = this.slides[index];
+    if (!slide || slide.pdfPage === null) return false;
+    if (locked && !this.slides.some((other) => other !== slide && !other.locked)) return false;
+    slide.locked = locked;
+    return true;
+  }
+
+  /** Die nächste nicht gesperrte Seite in dieser Richtung, null am Ende. */
+  nextVisible(from: number, direction: 1 | -1): number | null {
+    for (let index = from + direction; index >= 0 && index < this.slides.length; index += direction) {
+      if (!this.slides[index].locked) return index;
+    }
+    return null;
+  }
+
+  /** Die Seite selbst oder, wenn sie gesperrt ist, die nächste sichtbare. */
+  nearestVisible(index: number): number {
+    if (!this.slides[index]?.locked) return index;
+    return this.nextVisible(index, 1) ?? this.nextVisible(index, -1) ?? index;
+  }
+
+  firstVisible(): number {
+    return this.nearestVisible(0);
+  }
+
+  lastVisible(): number {
+    const last = this.slides.length - 1;
+    return this.slides[last].locked ? (this.nextVisible(last, -1) ?? last) : last;
+  }
+
+  /** Für die Anzeige: Die Klasse soll nicht an „3 / 11“ sehen, dass Seiten fehlen. */
+  visiblePosition(index: number): { position: number; total: number } {
+    const visible = this.slides.filter((slide) => !slide.locked);
+    return { position: visible.indexOf(this.slides[index]) + 1, total: visible.length };
   }
 
   hasInk(): boolean {
@@ -38,13 +87,14 @@ export class PresentationSession {
   /** Für die nächste Lerngruppe: Tinte weg, eingefügte leere Seiten auch. */
   clearAllInk(): void {
     this.slides = this.slides.filter((slide) => slide.pdfPage !== null);
+    this.hiddenSlides = [];
     this.slides.forEach((slide) => slide.ink.clear());
     this.current = Math.min(this.current, this.slides.length - 1);
   }
 
   insertBlankAfter(index: number, aspect: number): number {
     const position = Math.min(index + 1, this.slides.length);
-    this.slides.splice(position, 0, { id: this.nextId++, pdfPage: null, aspect, ink: new PageInk() });
+    this.slides.splice(position, 0, { id: this.nextId++, pdfPage: null, aspect, ink: new PageInk(), locked: false });
     return position;
   }
 
@@ -66,6 +116,7 @@ export class PresentationSession {
 }
 
 export type EraserMode = 'stroke' | 'partial';
+export type EdgeMode = 'page' | 'black';
 
 export interface Preferences {
   tool: Tool;
@@ -81,6 +132,13 @@ export interface Preferences {
   fingerDraws: boolean;
   /** Leiste bleibt stehen, die Seite rückt so weit, dass sie nichts verdeckt */
   toolbarPinned: boolean;
+  timerMinutes: number;
+  timerSize: TimerSize;
+  /** Mitte der Timeranzeige als Anteil des Bildschirms */
+  timerX: number;
+  timerY: number;
+  /** Fläche um die Folie: in der Farbe des Folienrands oder schwarz */
+  edgeMode: EdgeMode;
   /** Die Schnellfarben in der Leiste */
   quickPen: string[];
   quickMarker: string[];
@@ -150,6 +208,7 @@ export function widthToSlider(range: WidthRange, width: number): number {
 const QUICK_COLORS = 4;
 const CUSTOM_COLORS = 6;
 const STORAGE_KEY = 'pdf-praesentation-einstellungen';
+const POSITION_PREFIX = 'pdf-praesentation-seite:';
 const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape'];
 
 const DEFAULTS: Preferences = {
@@ -165,6 +224,11 @@ const DEFAULTS: Preferences = {
   eraserSize: 0.012,
   fingerDraws: false,
   toolbarPinned: false,
+  timerMinutes: 5,
+  timerSize: 'medium',
+  timerX: 0.9,
+  timerY: 0.1,
+  edgeMode: 'page',
   quickPen: ['#111111', '#d92626', '#1f5fd6', '#1a8f3c'],
   quickMarker: ['#ffe14d', '#7ee081', '#ff9ecb', '#8fd3ff'],
   customPen: [],
@@ -176,7 +240,12 @@ export function normalizePreferences(stored: unknown): Preferences {
   const values = (typeof stored === 'object' && stored !== null ? stored : {}) as Partial<Preferences>;
   const preferences = { ...DEFAULTS, ...values };
   if (!TOOLS.includes(preferences.tool)) preferences.tool = DEFAULTS.tool;
-  for (const key of ['penWidth', 'markerWidth', 'eraserSize'] as const) {
+  if (!['small', 'medium', 'large', 'huge'].includes(preferences.timerSize)) preferences.timerSize = DEFAULTS.timerSize;
+  if (!['page', 'black'].includes(preferences.edgeMode)) preferences.edgeMode = DEFAULTS.edgeMode;
+  for (const key of ['timerX', 'timerY'] as const) {
+    if (typeof preferences[key] !== 'number' || !Number.isFinite(preferences[key])) preferences[key] = DEFAULTS[key];
+  }
+  for (const key of ['penWidth', 'markerWidth', 'eraserSize', 'timerMinutes'] as const) {
     if (typeof preferences[key] !== 'number' || !(preferences[key] > 0)) preferences[key] = DEFAULTS[key];
   }
   for (const key of ['quickPen', 'quickMarker', 'customPen', 'customMarker'] as const) {
@@ -193,6 +262,27 @@ export function withQuickColor(quick: string[], color: string): string[] {
 
 export function withCustomColor(custom: string[], color: string): string[] {
   return [color, ...custom.filter((entry) => entry !== color)].slice(0, CUSTOM_COLORS);
+}
+
+/**
+ * Die zuletzt gezeigte Seite gehört zum Gerät. Stünde sie in der Tintendatei, schriebe schon
+ * bloßes Blättern eine Fassung, die auf einem anderen Gerät neuere Tinte verdrängen kann.
+ */
+export function loadPosition(pdfPath: string): number | null {
+  try {
+    const stored = window.localStorage.getItem(POSITION_PREFIX + pdfPath);
+    return stored === null ? null : Number(stored) || 0;
+  } catch {
+    return null;
+  }
+}
+
+export function savePosition(pdfPath: string, index: number): void {
+  try {
+    window.localStorage.setItem(POSITION_PREFIX + pdfPath, String(index));
+  } catch {
+    // Dann startet das PDF beim nächsten Mal vorn.
+  }
 }
 
 /** Liegt je Gerät im localStorage und bewusst nicht im iCloud-Vault. */

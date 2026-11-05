@@ -10,8 +10,11 @@ import {
   type App,
   type MarkdownPostProcessorContext,
 } from 'obsidian';
+import { findPdfs, looksLikePdfPath } from './pdfLookup';
 import { hashBytes } from './presenter/inkFile';
 import { InkSaver, InkStore } from './presenter/inkStore';
+import { serializeSession } from './presenter/inkFile';
+import { loadPosition, savePosition } from './presenter/session';
 import { Presenter } from './presenter/Presenter';
 import type { PresentationSession } from './presenter/session';
 import type { PdfDocument } from './presenter/types';
@@ -29,17 +32,15 @@ interface UnsavedSession {
 }
 
 class PdfSuggestModal extends FuzzySuggestModal<TFile> {
-  constructor(app: App, private onPick: (file: TFile) => void) {
+  constructor(app: App, private onPick: (file: TFile) => void, private candidates?: TFile[]) {
     super(app);
     this.setPlaceholder('PDF zum Präsentieren suchen …');
     this.emptyStateText = 'Kein passendes PDF gefunden.';
   }
 
   getItems(): TFile[] {
-    return this.app.vault
-      .getFiles()
-      .filter((file) => file.extension === 'pdf')
-      .sort((a, b) => b.stat.mtime - a.stat.mtime);
+    const files = this.candidates ?? this.app.vault.getFiles().filter((file) => file.extension === 'pdf');
+    return [...files].sort((a, b) => b.stat.mtime - a.stat.mtime);
   }
 
   getItemText(file: TFile): string {
@@ -56,6 +57,8 @@ export default class PdfPraesentationPlugin extends Plugin {
   private unsaved = new Map<string, UnsavedSession>();
   private presenter: Presenter | null = null;
   private opening = false;
+  /** Das Speichern der gerade geschlossenen Präsentation */
+  private closing: Promise<void> = Promise.resolve();
   private viewsWithAction = new WeakSet<FileView>();
 
   async onload(): Promise<void> {
@@ -98,6 +101,14 @@ export default class PdfPraesentationPlugin extends Plugin {
       }),
     );
 
+    // Umbenennen und Verschieben in Obsidian lässt sich sicher erkennen. Die Tinte zieht gleich mit um.
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (!(file instanceof TFile) || file.extension !== 'pdf' || this.presenter) return;
+        void this.store.movePdf(oldPath, file.path).catch((error) => console.error('[pdf-praesentation]', error));
+      }),
+    );
+
     this.registerEvent(this.app.workspace.on('layout-change', () => this.addPdfViewActions()));
     this.app.workspace.onLayoutReady(() => this.addPdfViewActions());
 
@@ -134,7 +145,7 @@ export default class PdfPraesentationPlugin extends Plugin {
     });
   }
 
-  /** Kleiner Startknopf hinter PDF-Links in der Leseansicht, etwa in Stundenentwürfen. */
+  /** Kleiner Startknopf hinter PDF-Links und PDF-Pfaden in der Leseansicht, etwa in Stundenentwürfen. */
   private addLinkButtons(element: HTMLElement, context: MarkdownPostProcessorContext): void {
     element.querySelectorAll<HTMLAnchorElement>('a.internal-link').forEach((link) => {
       const target = link.getAttribute('data-href') ?? link.getAttribute('href');
@@ -143,17 +154,40 @@ export default class PdfPraesentationPlugin extends Plugin {
       const file = this.app.metadataCache.getFirstLinkpathDest(path, context.sourcePath);
       if (file?.extension !== 'pdf') return;
       const page = Number(/page=(\d+)/.exec(subpath)?.[1]) || undefined;
-      const button = document.createElement('button');
-      button.className = 'pp-link-button';
-      button.setAttribute('aria-label', `${file.basename} präsentieren`);
-      setIcon(button, ICON);
-      button.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.present(file, page);
-      });
-      link.after(button);
+      link.after(this.startButton(`${file.basename} präsentieren`, () => void this.present(file, page)));
     });
+
+    // Die meisten Entwürfe nennen PDFs als Pfad in Backticks, nicht als Link.
+    const codes = Array.from(element.querySelectorAll('code')).filter(
+      (code) => !code.closest('pre') && looksLikePdfPath(code.textContent ?? ''),
+    );
+    if (!codes.length) return;
+    const pdfs = this.app.vault.getFiles().filter((file) => file.extension === 'pdf');
+    const paths = pdfs.map((file) => file.path);
+    for (const code of codes) {
+      const matches = findPdfs(code.textContent ?? '', paths);
+      if (!matches.length) continue;
+      const files = pdfs.filter((file) => matches.includes(file.path));
+      code.after(
+        this.startButton(`${code.textContent} präsentieren`, () => {
+          if (files.length === 1) void this.present(files[0]);
+          else new PdfSuggestModal(this.app, (file) => void this.present(file), files).open();
+        }),
+      );
+    }
+  }
+
+  private startButton(label: string, action: () => void): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'pp-link-button';
+    button.setAttribute('aria-label', label);
+    setIcon(button, ICON);
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    return button;
   }
 
   private async present(file: TFile, page?: number): Promise<void> {
@@ -169,31 +203,54 @@ export default class PdfPraesentationPlugin extends Plugin {
       doc = (await pdfjs.getDocument({ data: bytes }).promise) as PdfDocument;
       const openedDoc = doc;
 
+      // Sofort wieder geöffnet: erst fertig speichern, sonst lädt die neue Sitzung den alten Stand.
+      await this.closing;
+
+      // Ungespeicherte Tinte aus einer anderen Fassung des PDFs wird Nebendatei und gleich zusammengeführt.
+      const stale = this.unsaved.get(file.path);
+      if (stale && stale.contentHash !== contentHash) {
+        const text = serializeSession(stale.session, file.path);
+        if (text !== null) await this.store.write(this.store.sideFileName(file.path, contentHash), text);
+        this.unsaved.delete(file.path);
+      }
+
       const loaded = await this.store.load(file.path, contentHash, openedDoc.numPages, (path) =>
         this.app.vault.getAbstractFileByPath(path) instanceof TFile,
       );
       const waiting = this.unsaved.get(file.path);
-      const session = waiting?.contentHash === contentHash ? waiting.session : loaded.session;
+      if (waiting) loaded.session = waiting.session;
+      const session = loaded.session;
+      const position = loadPosition(file.path) ?? loaded.storedCurrent;
       if (page) session.current = session.indexOfPage(page);
+      else if (position !== null) session.current = Math.max(0, Math.min(session.slides.length - 1, position));
       loaded.notices.forEach((message) => new Notice(message, NOTICE_MS));
 
-      const saver = new InkSaver(this.store, file.path, contentHash, session, loaded.fileName, loaded.readOnly, (error) => {
-        console.error('[pdf-praesentation]', error);
-        new Notice('Die Tinte ließ sich nicht speichern. Sie bleibt erhalten, bis Obsidian beendet wird.', NOTICE_MS);
-      });
+      const saver = InkSaver.fromLoad(
+        this.store,
+        file.path,
+        contentHash,
+        loaded,
+        (error) => {
+          console.error('[pdf-praesentation]', error);
+          new Notice('Die Tinte ließ sich nicht speichern. Sie bleibt erhalten, bis Obsidian beendet wird.', NOTICE_MS);
+        },
+        () => new Notice('Ein anderes Gerät hat diese Tinte ebenfalls geändert. Beide Fassungen bleiben erhalten und werden beim nächsten Öffnen zusammengeführt.', NOTICE_MS),
+      );
 
-      if (waiting?.contentHash === contentHash) saver.markUnsaved();
+      if (waiting) saver.markUnsaved();
 
       this.presenter = new Presenter({
         doc: openedDoc,
         session,
         onChange: () => saver.schedule(),
+        onPageChange: (index) => savePosition(file.path, index),
         onHidden: () => void saver.flush(),
         onClose: () => {
           this.presenter = null;
           void openedDoc.destroy();
-          void saver.flush().then(() => {
-            if (saver.failed) this.unsaved.set(file.path, { contentHash, session });
+          this.closing = saver.flush().then(() => {
+            // Nur nach echtem Schreiben darf die Sitzung aus dem Speicher: Bei nicht lesbarer Datei wird nichts geschrieben.
+            if (saver.failed || (loaded.readOnly && session.hasContent())) this.unsaved.set(file.path, { contentHash, session });
             else this.unsaved.delete(file.path);
           });
         },

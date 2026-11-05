@@ -122,6 +122,12 @@ export class PageRenderer {
       }
       this.entries.delete(pageNumber);
     }
+    // pdf.js hält sonst die Daten jeder berührten Seite. Läuft dort gerade etwas, lässt es die Seite in Ruhe.
+    for (const [pageNumber, page] of this.pages) {
+      if (pageNumbers.has(pageNumber)) continue;
+      this.pages.delete(pageNumber);
+      void page.then((loaded) => loaded.cleanup?.()).catch(() => undefined);
+    }
   }
 
   /** Eigenständiges Vorschaubild für die Übersicht, geht nicht in den Zwischenspeicher. */

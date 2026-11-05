@@ -104,6 +104,15 @@ export function visibleRegion(view: ViewState, sheet: Size, stage: Size, pixelRa
   };
 }
 
+/** Farbe des Folienrands aus den Ecken der Seite. Der Median übersieht ein Logo in einer einzelnen Ecke. */
+export function medianColor(samples: number[][]): string {
+  const channel = (index: number) => {
+    const values = samples.map((sample) => sample[index]).sort((a, b) => a - b);
+    return values[values.length >> 1];
+  };
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
+}
+
 export type WheelAction = { type: 'zoom'; factor: number } | { type: 'pan'; dx: number; dy: number } | null;
 
 const WHEEL_ZOOM_SPEED = 0.01;

@@ -113,6 +113,13 @@ describe('GestureRouter', () => {
     expect(log).toEqual(['inkStart', 'inkCancel', 'pinch', 'gestureEnd']);
   });
 
+  it('setzt der Stift ohne vorheriges Absetzen neu auf, bleibt der alte Strich erhalten', () => {
+    router.down(input(1, 'pen', 10, 10, 0));
+    router.down(input(2, 'pen', 50, 50, 100));
+    router.up(input(2, 'pen', 50, 50, 200));
+    expect(log).toEqual(['inkStart', 'inkEnd', 'inkStart', 'inkEnd']);
+  });
+
   it('ein von iPadOS abgebrochener Strich bleibt erhalten', () => {
     router.down(input(1, 'pen', 10, 10, 0));
     router.cancel(input(1, 'pen', 10, 10, 50));

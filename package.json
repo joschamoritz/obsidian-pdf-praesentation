@@ -1,0 +1,28 @@
+{
+  "name": "obsidian-pdf-praesentation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PDFs in Obsidian im Vollbild präsentieren, mit Pencil-Ink und Laserpointer.",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --harness && node dev/server.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "install-plugin": "node scripts/install.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "lucide-static": "^1.67.0",
+    "obsidian": "^1.14.4",
+    "pdfjs-dist": "^4.10.38",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "perfect-freehand": "^1.2.3"
+  },
+  "license": "MIT",
+  "author": "Joscha Fresmann"
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PDF-Präsentation Testseite</title>
+  <style>
+    /* Regeln aus Obsidians app.css auf dem iPad. Ohne sie zeigt die Testseite Fehler nicht, die nur dort auftreten. */
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 30px;
+      border: 0;
+      padding: 4px 12px;
+      cursor: pointer;
+    }
+    button:not(.clickable-icon) { background-color: #eee; box-shadow: 0 1px 2px #0006; }
+    .is-tablet button:not(.clickable-icon) { padding: 4px 20px; }
+  </style>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="is-mobile is-tablet" style="margin:0;background:#222;color:#eee;font-family:sans-serif">
+  <p style="padding:16px"><a style="color:#8fd3ff" href="?pdf=folien">Folien (16:9)</a> · <a style="color:#8fd3ff" href="?pdf=blaetter">Arbeitsblätter (A4)</a></p>
+  <script type="module" src="/dev/bundle/harness.js"></script>
+</body>
+</html>

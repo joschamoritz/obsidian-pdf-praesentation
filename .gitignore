@@ -1,0 +1,5 @@
+node_modules/
+main.js
+dev/bundle/
+dev/pdf.worker.mjs
+dev/fixtures/

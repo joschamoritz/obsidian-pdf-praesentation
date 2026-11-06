@@ -1,6 +1,6 @@
 // Das Dateiformat der gespeicherten Tinte. Ohne Dateizugriff, damit es sich testen lässt.
 import { cleanStroke, type InkKind, type InkPoint, type PenType, type Stroke } from './ink';
-import { PresentationSession, type Slide } from './session';
+import { PresentationSession, type Cover, type Slide } from './session';
 
 /** Ab Version 2 sind Striche frei von überlappenden Stiftdaten. Ältere werden beim Laden aufgeräumt. */
 export const INK_FILE_VERSION = 2;
@@ -39,6 +39,8 @@ export interface StoredSlide {
   a?: number;
   /** gesperrt */
   l?: 1;
+  /** Abdeckungen: x, y, Breite, Höhe */
+  c?: number[][];
   s?: StoredStroke[];
 }
 
@@ -90,6 +92,7 @@ export function serializeSession(session: PresentationSession, path: string): st
     slides: session.slides.map((slide): StoredSlide => {
       const stored: StoredSlide = slide.pdfPage === null ? { a: slide.aspect ?? undefined } : { p: slide.pdfPage };
       if (slide.locked) stored.l = 1;
+      if (slide.covers.length) stored.c = slide.covers.map((cover) => [round(cover.x, 5), round(cover.y, 5), round(cover.w, 5), round(cover.h, 5)]);
       if (slide.ink.strokes.length) stored.s = slide.ink.strokes.map(storeStroke);
       return stored;
     }).concat(session.hiddenSlides),
@@ -134,6 +137,13 @@ function restoreInk(slide: Slide, stored: StoredSlide, version: number): void {
   slide.ink.strokes = version < 2 ? strokes.map(cleanStroke) : strokes;
 }
 
+function restoreCovers(stored: StoredSlide): Cover[] {
+  if (!Array.isArray(stored.c)) return [];
+  return stored.c
+    .filter((cover) => Array.isArray(cover) && cover.length === 4 && cover.every(Number.isFinite))
+    .map(([x, y, w, h]) => ({ x, y, w, h }));
+}
+
 function normalizedHidden(stored: StoredSlide, version: number): StoredSlide {
   if (version >= 2) return stored;
   const strokes = (stored.s ?? []).map(restoreStroke).filter((stroke): stroke is Stroke => stroke !== null);
@@ -165,6 +175,9 @@ export function mergeInkFile(session: PresentationSession, file: InkFile, pageCo
         continue;
       }
       if (stored.l === 1 && session.slides.some((entry) => entry !== slide && !entry.locked)) slide.locked = true;
+      for (const cover of restoreCovers(stored)) {
+        if (!slide.covers.some((entry) => JSON.stringify(entry) === JSON.stringify(cover))) slide.covers.push(cover);
+      }
       const known = new Set(slide.ink.strokes.map(keyOf));
       const fresh = incoming.ink.strokes.filter((stroke) => !known.has(keyOf(stroke)));
       slide.ink.strokes = [...slide.ink.strokes, ...fresh];
@@ -220,6 +233,7 @@ export function restoreSession(file: InkFile, pageCount: number): { session: Pre
     const stored = pages.get(page);
     if (stored) {
       slide.locked = stored.l === 1;
+      slide.covers = restoreCovers(stored);
       restoreInk(slide, stored, file.version);
     }
     appendBlanks(page);

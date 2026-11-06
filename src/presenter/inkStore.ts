@@ -47,9 +47,9 @@ export interface LoadResult {
 }
 
 /** Hauptdatei. Das strenge Muster hält iCloud-Konfliktkopien und Nebendateien davon fern. */
-const MAIN_FILE = /^([0-9a-z]+)\.([0-9a-z]+)\.json$/;
+const MAIN_FILE = /^([0-9a-z]+)\.([0-9a-z]+)(?:\.g-([0-9a-z-]+))?\.json$/;
 /** Konfliktkopie von iCloud („abc.def 2.json“) oder eigene Nebendatei („abc.def konflikt-123.json“) */
-const SIDE_FILE = /^([0-9a-z]+)\.([0-9a-z]+) (.+)\.json$/;
+const SIDE_FILE = /^([0-9a-z]+)\.([0-9a-z]+)(?:\.g-([0-9a-z-]+))? (.+)\.json$/;
 
 const UNREADABLE = 'Die Tinte ließ sich nicht laden, vielleicht fehlt sie noch aus iCloud. Änderungen werden nicht gespeichert.';
 
@@ -71,8 +71,20 @@ export class InkStore {
 
   constructor(private adapter: InkAdapter, private folder: string) {}
 
-  fileName(pdfPath: string, contentHash: string): string {
-    return `${hashText(pdfPath)}.${contentHash}.json`;
+  /** Ein Tintenstand je Lerngruppe. Ohne Gruppe bleibt es beim bisherigen Dateinamen. */
+  fileName(pdfPath: string, contentHash: string, group = ''): string {
+    return `${hashText(pdfPath)}.${contentHash}${group ? `.g-${group}` : ''}.json`;
+  }
+
+  /** Alle Lerngruppen, zu denen es für dieses PDF Tinte gibt. */
+  async groups(pdfPath: string): Promise<string[]> {
+    const pathHash = hashText(pdfPath);
+    const found = new Set<string>();
+    for (const name of await this.allNames()) {
+      const match = MAIN_FILE.exec(name) ?? SIDE_FILE.exec(name);
+      if (match && match[1] === pathHash && match[3]) found.add(match[3]);
+    }
+    return [...found].sort();
   }
 
   private fullPath(fileName: string): string {
@@ -90,6 +102,7 @@ export class InkStore {
     contentHash: string,
     pageCount: number,
     pdfExists: (path: string) => boolean,
+    group = '',
   ): Promise<LoadResult> {
     const fresh = (extra: Partial<LoadResult> = {}): LoadResult => ({
       session: new PresentationSession(pageCount),
@@ -110,9 +123,10 @@ export class InkStore {
       return fresh({ readOnly: true, notices: [UNREADABLE] });
     }
     const pathHash = hashText(pdfPath);
-    const mains = names.filter((name) => MAIN_FILE.test(name));
+    // Jeder Tintenstand ist für sich: Andere Gruppen tauchen hier gar nicht erst auf.
+    const mains = names.filter((name) => (MAIN_FILE.exec(name)?.[3] ?? '') === group && MAIN_FILE.test(name));
     const samePath = mains.filter((name) => name.startsWith(`${pathHash}.`));
-    const exact = this.fileName(pdfPath, contentHash);
+    const exact = this.fileName(pdfPath, contentHash, group);
 
     let result: LoadResult;
     if (samePath.includes(exact)) {
@@ -124,9 +138,9 @@ export class InkStore {
       // iCloud meldet Dateien, die noch nicht auf dem Gerät liegen, als Platzhalter.
       return fresh({ readOnly: true, notices: [UNREADABLE] });
     } else {
-      result = await this.adoptByContent(pdfPath, contentHash, mains, pageCount, pdfExists, fresh);
+      result = await this.adoptByContent(pdfPath, contentHash, group, mains, pageCount, pdfExists, fresh);
     }
-    if (!result.readOnly) await this.mergeSideFiles(names, pathHash, pageCount, result);
+    if (!result.readOnly) await this.mergeSideFiles(names, pathHash, group, pageCount, result);
     return result;
   }
 
@@ -147,13 +161,15 @@ export class InkStore {
   private async adoptByContent(
     pdfPath: string,
     contentHash: string,
+    group: string,
     mains: string[],
     pageCount: number,
     pdfExists: (path: string) => boolean,
     fresh: (extra?: Partial<LoadResult>) => LoadResult,
   ): Promise<LoadResult> {
     const candidates: { name: string; score: number }[] = [];
-    for (const name of mains.filter((entry) => entry.endsWith(`.${contentHash}.json`))) {
+    const ending = `.${contentHash}${group ? `.g-${group}` : ''}.json`;
+    for (const name of mains.filter((entry) => entry.endsWith(ending))) {
       let file: InkFile;
       try {
         file = parseInkFile(await this.adapter.read(this.fullPath(name)));
@@ -230,11 +246,11 @@ export class InkStore {
   }
 
   /** Übernimmt Tinte aus Konfliktkopien und Nebendateien, damit keine Fassung stillschweigend liegen bleibt. */
-  private async mergeSideFiles(names: string[], pathHash: string, pageCount: number, result: LoadResult): Promise<void> {
+  private async mergeSideFiles(names: string[], pathHash: string, group: string, pageCount: number, result: LoadResult): Promise<void> {
     let added = 0;
     for (const name of names) {
       const match = SIDE_FILE.exec(name);
-      if (!match || match[1] !== pathHash) continue;
+      if (!match || match[1] !== pathHash || (match[3] ?? '') !== group) continue;
       try {
         added += mergeInkFile(result.session, parseInkFile(await this.adapter.read(this.fullPath(name))), pageCount);
         result.mergedFiles.push(name);
@@ -270,8 +286,8 @@ export class InkStore {
     return (await this.adapter.exists(path)) ? this.adapter.read(path) : null;
   }
 
-  sideFileName(pdfPath: string, contentHash: string): string {
-    return `${hashText(pdfPath)}.${contentHash} konflikt-${Date.now()}.json`;
+  sideFileName(pdfPath: string, contentHash: string, group = ''): string {
+    return `${hashText(pdfPath)}.${contentHash}${group ? `.g-${group}` : ''} konflikt-${Date.now()}.json`;
   }
 
   /** Ein PDF wurde in Obsidian umbenannt: Die Tinte zieht sofort mit um. */
@@ -323,9 +339,10 @@ export class InkSaver {
     existingName: string | null,
     private readOnly: boolean,
     private onError: (error: unknown) => void,
+    private group = '',
   ) {
     this.currentName = existingName;
-    this.targetName = store.fileName(pdfPath, contentHash);
+    this.targetName = store.fileName(pdfPath, contentHash, group);
     this.lastText = serializeSession(session, pdfPath);
     this.expected = existingName ? undefined : null;
   }
@@ -337,8 +354,9 @@ export class InkSaver {
     loaded: LoadResult,
     onError: (error: unknown) => void,
     onConflict: () => void,
+    group = '',
   ): InkSaver {
-    const saver = new InkSaver(store, pdfPath, contentHash, loaded.session, loaded.fileName, loaded.readOnly, onError);
+    const saver = new InkSaver(store, pdfPath, contentHash, loaded.session, loaded.fileName, loaded.readOnly, onError, group);
     saver.expected = loaded.diskText;
     saver.mergedFiles = loaded.mergedFiles;
     saver.onConflict = onConflict;
@@ -405,7 +423,7 @@ export class InkSaver {
         const content = text ?? (this.currentName ? emptyInkFile(this.pdfPath) : null);
         if (content !== null) {
           if (await this.diskChanged(moved)) {
-            this.conflictName = this.store.sideFileName(this.pdfPath, this.contentHash);
+            this.conflictName = this.store.sideFileName(this.pdfPath, this.contentHash, this.group);
             if (text !== null) await this.store.write(this.conflictName, text);
             this.onConflict();
           } else {

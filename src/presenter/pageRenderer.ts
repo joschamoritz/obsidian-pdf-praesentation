@@ -139,6 +139,21 @@ export class PageRenderer {
     return { canvas, task: page.render({ canvas, canvasContext: context, viewport }) };
   }
 
+  /** Der Text der Seite mit Lage in Seitenbreiten, y von oben. */
+  async textItems(pageNumber: number): Promise<{ text: string; x: number; y: number; width: number }[]> {
+    const page = await this.page(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent?.();
+    if (!content || !viewport.convertToViewportPoint) return [];
+    const result: { text: string; x: number; y: number; width: number }[] = [];
+    for (const item of content.items) {
+      if (!item.str?.trim() || !item.transform) continue;
+      const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+      result.push({ text: item.str, x: x / viewport.width, y: y / viewport.width, width: (item.width ?? 0) / viewport.width });
+    }
+    return result;
+  }
+
   /** Rendert nur einen Ausschnitt der Seite, für scharfe Darstellung im Zoom. */
   async region(
     pageNumber: number,

@@ -62,6 +62,65 @@
   pointer-events: none;
 }
 
+.pp-cover-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.pp-cover {
+  position: absolute;
+  overflow: hidden;
+}
+
+.pp-cover-sheet {
+  position: absolute;
+  inset: 0;
+  background: #d9d5c8;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.35);
+}
+
+.pp-line-band {
+  position: absolute;
+  background: rgba(255, 225, 77, 0.5);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+}
+
+.pp-spot {
+  position: absolute;
+  display: none;
+  z-index: 1;
+  border-radius: 50%;
+  box-shadow: 0 0 0 300vmax rgba(0, 0, 0, 0.93);
+  pointer-events: none;
+}
+
+.pp-spot.is-visible {
+  display: block;
+}
+
+.pp-plan {
+  position: absolute;
+  z-index: 2;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  left: 12px;
+  display: none;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(20, 20, 22, 0.8);
+  color: #fff;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.pp-plan.is-visible {
+  display: block;
+}
+
 .pp-detail {
   position: absolute;
   pointer-events: none;
@@ -347,6 +406,20 @@
   cursor: pointer;
 }
 
+.pp-root .pp-text-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f2f2f2;
+  font-size: 14px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .pp-chips-small {
   grid-template-columns: repeat(8, minmax(0, 1fr));
 }
@@ -535,6 +608,10 @@
 
 .pp-root .pp-tile.is-current .pp-tile-page {
   outline-color: #8fd3ff;
+}
+
+.pp-root .pp-tile.is-filtered {
+  display: none;
 }
 
 .pp-tile-label {

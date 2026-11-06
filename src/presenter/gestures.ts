@@ -22,6 +22,11 @@ export interface GestureHandlers<E extends PointerInput> {
   gestureEnd(): void;
   isZoomed(): boolean;
   fingerDraws(): boolean;
+  /** Liegt hier eine sichtbare Abdeckung? Dann gehört der Finger ihr. */
+  coverAt?(x: number, y: number): boolean;
+  coverDrag?(startX: number, startY: number, dx: number, dy: number): void;
+  coverTap?(x: number, y: number): void;
+  coverEnd?(): void;
 }
 
 interface TrackedTouch {
@@ -29,7 +34,7 @@ interface TrackedTouch {
   y: number;
 }
 
-type Mode = 'idle' | 'ink' | 'one-finger' | 'pinch' | 'settling';
+type Mode = 'idle' | 'ink' | 'one-finger' | 'cover' | 'pinch' | 'settling';
 
 /** So lange nach dem Stift gelten Berührungen als aufliegende Hand. */
 export const PALM_WINDOW_MS = 500;
@@ -63,13 +68,22 @@ export class GestureRouter<E extends PointerInput> {
 
   move(event: E): void {
     if (event.pointerType === 'pen') this.lastPenTime = event.timeStamp;
+    const touch = this.touches.get(event.pointerId);
     if (this.mode === 'ink') {
       if (event.pointerId === this.inkPointer) this.handlers.inkMove(event);
+      // Sonst rechnet ein später dazukommender zweiter Finger mit einer alten Position, und das Bild springt.
+      if (touch) {
+        touch.x = event.clientX;
+        touch.y = event.clientY;
+      }
       return;
     }
-    const touch = this.touches.get(event.pointerId);
     if (!touch) return;
-    if (this.mode === 'one-finger') {
+    if (this.mode === 'cover') {
+      const distance = Math.hypot(event.clientX - this.start.x, event.clientY - this.start.y);
+      if (distance > SLOP_PX) this.moved = true;
+      if (this.moved) this.handlers.coverDrag?.(this.start.x, this.start.y, event.clientX - this.start.x, event.clientY - this.start.y);
+    } else if (this.mode === 'one-finger') {
       this.oneFingerMove(event, touch);
     } else if (this.mode === 'pinch') {
       touch.x = event.clientX;
@@ -112,6 +126,12 @@ export class GestureRouter<E extends PointerInput> {
     }
     this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.touches.size === 1) {
+      if (this.handlers.coverAt?.(event.clientX, event.clientY)) {
+        this.mode = 'cover';
+        this.moved = false;
+        this.start = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+        return;
+      }
       if (this.handlers.fingerDraws()) {
         this.startInk(event);
         return;
@@ -125,6 +145,7 @@ export class GestureRouter<E extends PointerInput> {
         else this.handlers.inkEnd(null);
         this.inkPointer = null;
       }
+      if (this.mode === 'cover') this.handlers.coverEnd?.();
       this.startPinch();
     }
   }
@@ -190,7 +211,11 @@ export class GestureRouter<E extends PointerInput> {
 
     if (!this.touches.delete(event.pointerId)) return;
 
-    if (this.mode === 'one-finger') {
+    if (this.mode === 'cover') {
+      if (!cancelled && !this.moved) this.handlers.coverTap?.(event.clientX, event.clientY);
+      else this.handlers.coverEnd?.();
+      this.mode = this.touches.size ? 'settling' : 'idle';
+    } else if (this.mode === 'one-finger') {
       if (!cancelled) this.classifyOneFinger(event);
       else if (this.moved) this.handlers.gestureEnd();
       this.mode = 'idle';
@@ -198,6 +223,9 @@ export class GestureRouter<E extends PointerInput> {
       if (this.touches.size < 2) {
         this.handlers.gestureEnd();
         this.mode = this.touches.size ? 'settling' : 'idle';
+      } else {
+        // Ein dritter Finger bleibt liegen: Abstand und Mitte neu messen, sonst springt der Zoom.
+        this.startPinch();
       }
     } else if (this.mode === 'settling' && this.touches.size === 0) {
       this.mode = 'idle';

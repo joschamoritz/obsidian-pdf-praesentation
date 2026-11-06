@@ -32,6 +32,11 @@ export class CountdownTimer {
     return this.endAt !== null ? Math.max(0, this.endAt - this.now()) : this.leftMs;
   }
 
+  /** Wie lange der Timer schon abgelaufen ist */
+  get overtime(): number {
+    return this.endAt !== null ? Math.max(0, this.now() - this.endAt) : 0;
+  }
+
   get minutes(): number {
     return Math.round(this.durationMs / MINUTE);
   }
@@ -104,7 +109,14 @@ export function formatRemaining(ms: number): string {
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
 }
 
+/** Zeit nach dem Ablauf. Eine Information und kein Effekt: Du entscheidest, ob sie reicht. */
+export function formatOvertime(ms: number): string {
+  return `+${formatRemaining(Math.floor(ms / 1000) * 1000)}`;
+}
+
 export interface TimerWidgetOptions {
+  /** Läuft beim Wechsel in ein anderes PDF der Stunde einfach weiter */
+  timer?: CountdownTimer;
   minutes: number;
   size: TimerSize;
   x: number;
@@ -130,7 +142,7 @@ export class TimerWidget {
   private drag: { pointerId: number; startX: number; startY: number; moved: boolean } | null = null;
 
   constructor(private root: HTMLElement, private options: TimerWidgetOptions) {
-    this.timer = new CountdownTimer(options.minutes);
+    this.timer = options.timer ?? new CountdownTimer(options.minutes);
     this.x = options.x;
     this.y = options.y;
     this.element = document.createElement('button');
@@ -163,13 +175,14 @@ export class TimerWidget {
     this.element.classList.toggle('is-visible', visible);
     this.element.classList.toggle('is-paused', status === 'paused');
     this.element.dataset.phase = this.timer.phase;
-    this.element.textContent = formatRemaining(this.timer.remaining);
+    this.element.textContent = status === 'finished' ? formatOvertime(this.timer.overtime) : formatRemaining(this.timer.remaining);
     const label = status === 'running' ? 'Timer anhalten' : status === 'finished' ? 'Timer ausblenden' : 'Timer fortsetzen';
     this.element.setAttribute('aria-label', label);
     this.applyPosition();
-    if (status === 'running' && !this.interval) {
+    const ticking = status === 'running' || status === 'finished';
+    if (ticking && !this.interval) {
       this.interval = window.setInterval(() => this.render(), TICK_MS);
-    } else if (status !== 'running' && this.interval) {
+    } else if (!ticking && this.interval) {
       window.clearInterval(this.interval);
       this.interval = 0;
     }

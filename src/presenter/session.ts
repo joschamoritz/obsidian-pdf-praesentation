@@ -12,6 +12,15 @@ export interface Slide {
   ink: PageInk;
   /** Erscheint nicht beim Blättern und ist in der Übersicht verdeckt, etwa eine Lösungsseite */
   locked: boolean;
+  /** Flächen, die die Folie abdecken, bis sie in der Stunde weggezogen werden. In Seitenbreiten. */
+  covers: Cover[];
+}
+
+export interface Cover {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /** Was zwischen zwei Präsentationen desselben PDFs erhalten bleibt. */
@@ -27,14 +36,14 @@ export class PresentationSession {
   }
 
   appendSlide(pdfPage: number | null, aspect: number | null): Slide {
-    const slide: Slide = { id: this.nextId++, pdfPage, aspect, ink: new PageInk(), locked: false };
+    const slide: Slide = { id: this.nextId++, pdfPage, aspect, ink: new PageInk(), locked: false, covers: [] };
     this.slides.push(slide);
     return slide;
   }
 
   /** Gibt es etwas, das sich aufzuheben lohnt? */
   hasContent(): boolean {
-    return this.hiddenSlides.length > 0 || this.slides.some((slide) => slide.pdfPage === null || slide.locked || slide.ink.strokes.length > 0);
+    return this.hiddenSlides.length > 0 || this.slides.some((slide) => slide.pdfPage === null || slide.locked || slide.covers.length > 0 || slide.ink.strokes.length > 0);
   }
 
   /** Gibt es etwas, das „Alle Tinte löschen“ entfernen würde? Sperren bleiben dabei stehen. */
@@ -94,7 +103,7 @@ export class PresentationSession {
 
   insertBlankAfter(index: number, aspect: number): number {
     const position = Math.min(index + 1, this.slides.length);
-    this.slides.splice(position, 0, { id: this.nextId++, pdfPage: null, aspect, ink: new PageInk(), locked: false });
+    this.slides.splice(position, 0, { id: this.nextId++, pdfPage: null, aspect, ink: new PageInk(), locked: false, covers: [] });
     return position;
   }
 
@@ -117,6 +126,7 @@ export class PresentationSession {
 
 export type EraserMode = 'stroke' | 'partial';
 export type EdgeMode = 'page' | 'black';
+export type PointerMode = 'laser' | 'spot';
 
 export interface Preferences {
   tool: Tool;
@@ -132,6 +142,10 @@ export interface Preferences {
   fingerDraws: boolean;
   /** Leiste bleibt stehen, die Seite rückt so weit, dass sie nichts verdeckt */
   toolbarPinned: boolean;
+  /** Der Zeiger: Laserpunkt oder dunkles Bild mit einem Sichtfenster */
+  pointerMode: PointerMode;
+  /** Radius des Sichtfensters als Anteil der kürzeren Bildschirmseite */
+  spotSize: number;
   timerMinutes: number;
   timerSize: TimerSize;
   /** Mitte der Timeranzeige als Anteil des Bildschirms */
@@ -209,7 +223,8 @@ const QUICK_COLORS = 4;
 const CUSTOM_COLORS = 6;
 const STORAGE_KEY = 'pdf-praesentation-einstellungen';
 const POSITION_PREFIX = 'pdf-praesentation-seite:';
-const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape'];
+const GROUP_PREFIX = 'pdf-praesentation-gruppe:';
+const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape', 'cover'];
 
 const DEFAULTS: Preferences = {
   tool: 'pen',
@@ -224,6 +239,8 @@ const DEFAULTS: Preferences = {
   eraserSize: 0.012,
   fingerDraws: false,
   toolbarPinned: false,
+  pointerMode: 'laser',
+  spotSize: 0.16,
   timerMinutes: 5,
   timerSize: 'medium',
   timerX: 0.9,
@@ -242,10 +259,11 @@ export function normalizePreferences(stored: unknown): Preferences {
   if (!TOOLS.includes(preferences.tool)) preferences.tool = DEFAULTS.tool;
   if (!['small', 'medium', 'large', 'huge'].includes(preferences.timerSize)) preferences.timerSize = DEFAULTS.timerSize;
   if (!['page', 'black'].includes(preferences.edgeMode)) preferences.edgeMode = DEFAULTS.edgeMode;
+  if (!['laser', 'spot'].includes(preferences.pointerMode)) preferences.pointerMode = DEFAULTS.pointerMode;
   for (const key of ['timerX', 'timerY'] as const) {
     if (typeof preferences[key] !== 'number' || !Number.isFinite(preferences[key])) preferences[key] = DEFAULTS[key];
   }
-  for (const key of ['penWidth', 'markerWidth', 'eraserSize', 'timerMinutes'] as const) {
+  for (const key of ['penWidth', 'markerWidth', 'eraserSize', 'timerMinutes', 'spotSize'] as const) {
     if (typeof preferences[key] !== 'number' || !(preferences[key] > 0)) preferences[key] = DEFAULTS[key];
   }
   for (const key of ['quickPen', 'quickMarker', 'customPen', 'customMarker'] as const) {
@@ -282,6 +300,24 @@ export function savePosition(pdfPath: string, index: number): void {
     window.localStorage.setItem(POSITION_PREFIX + pdfPath, String(index));
   } catch {
     // Dann startet das PDF beim nächsten Mal vorn.
+  }
+}
+
+/** Welcher Tintenstand zuletzt zu diesem PDF gehörte. Auch das gehört zum Gerät. */
+export function loadGroup(pdfPath: string): string {
+  try {
+    return window.localStorage.getItem(GROUP_PREFIX + pdfPath) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveGroup(pdfPath: string, group: string): void {
+  try {
+    if (group) window.localStorage.setItem(GROUP_PREFIX + pdfPath, group);
+    else window.localStorage.removeItem(GROUP_PREFIX + pdfPath);
+  } catch {
+    // Dann startet das PDF beim nächsten Mal mit dem Standard-Tintenstand.
   }
 }
 

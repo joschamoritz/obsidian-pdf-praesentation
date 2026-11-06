@@ -54,6 +54,7 @@ export class Overview {
     this.hint = document.createElement('span');
     this.hint.className = 'pp-overview-hint';
     headerActions.appendChild(this.hint);
+    if (session.hasInk()) headerActions.appendChild(this.filterButton());
     if (session.hasClearable()) headerActions.appendChild(this.clearAllButton());
     headerActions.appendChild(closeButton);
     header.append(title, headerActions);
@@ -71,6 +72,21 @@ export class Overview {
 
     session.slides.forEach((slide, index) => grid.appendChild(this.tile(slide, index)));
     grid.children[session.current]?.scrollIntoView({ block: 'center' });
+  }
+
+  /** Zum Schluss der Stunde: nur noch das, was entstanden ist. */
+  private filterButton(): HTMLElement {
+    const button = document.createElement('button');
+    button.className = 'pp-text-button';
+    button.textContent = 'Nur beschriebene';
+    button.addEventListener('click', () => {
+      const on = button.classList.toggle('is-primary');
+      button.setAttribute('aria-pressed', String(on));
+      Array.from(this.grid.children).forEach((tile, index) => {
+        tile.classList.toggle('is-filtered', on && !this.session.slides[index].ink.strokes.length);
+      });
+    });
+    return button;
   }
 
   /** Für die nächste Lerngruppe. Zwei Tipps, weil damit auch die eingefügten Seiten verschwinden. */
@@ -233,6 +249,9 @@ export class Overview {
     for (const stroke of slide.ink.strokes) if (stroke.kind === 'marker') drawStroke(context, stroke);
     context.globalCompositeOperation = 'source-over';
     context.globalAlpha = 1;
+    // Abgedecktes bleibt auch hier verdeckt, die Klasse sieht die Übersicht ja mit.
+    context.fillStyle = '#d9d5c8';
+    for (const cover of slide.covers) context.fillRect(cover.x, cover.y, cover.w, cover.h);
     for (const stroke of slide.ink.strokes) if (stroke.kind === 'pen') drawStroke(context, stroke);
   }
 

@@ -33,9 +33,28 @@ export interface ToolbarActions {
   timerReset(): void;
   /** Das Timerfeld ist offen: Die Anzeige zeigt schon Größe und Lage. */
   timerPreview(on: boolean): void;
+  coverAll(): void;
+  coverRemoveAll(): void;
+  replay(): void;
+  exportPdf(): void;
+  switchGroup(name: string): void;
+  switchFile(path: string): void;
+  togglePlan(): void;
+  showLine(line: number | null): void;
 }
 
-type PanelMode = 'tool' | 'timer' | 'view';
+type PanelMode = 'tool' | 'timer' | 'more';
+
+export interface MoreState {
+  group: string;
+  groups: string[];
+  suggestions: string[];
+  files: { path: string; label: string; current: boolean }[];
+  hasPlan: boolean;
+  planRunning: boolean;
+  canExport: boolean;
+  lineMessage: string;
+}
 
 export interface ToolbarState {
   preferences: Preferences;
@@ -51,6 +70,7 @@ export interface ToolbarState {
   sheetWidth: number;
   timerStatus: TimerStatus;
   timerMinutes: number;
+  more: MoreState;
 }
 
 const AUTO_HIDE_MS = 5000;
@@ -58,11 +78,12 @@ const PREVIEW_HEIGHT = 56;
 const PEN_SAMPLE_HEIGHT = 34;
 
 const TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
-  { tool: 'laser', icon: 'laser', label: 'Laserpointer' },
+  { tool: 'laser', icon: 'laser', label: 'Zeiger' },
   { tool: 'pen', icon: 'pen', label: 'Stift' },
   { tool: 'marker', icon: 'highlighter', label: 'Marker' },
   { tool: 'shape', icon: 'shapes', label: 'Formen' },
   { tool: 'eraser', icon: 'eraser', label: 'Radierer' },
+  { tool: 'cover', icon: 'cover', label: 'Abdecken' },
 ];
 
 const TIMER_MINUTES = [1, 2, 3, 5, 10, 15, 20, 30];
@@ -140,7 +161,7 @@ export class Toolbar {
   private pageLabel: HTMLElement;
   private pinButton: HTMLButtonElement;
   private timerButton: HTMLButtonElement;
-  private viewButton: HTMLButtonElement;
+  private moreButton: HTMLButtonElement;
   private panelMode: PanelMode = 'tool';
   private pinned = false;
   private hideTimer = 0;
@@ -187,7 +208,7 @@ export class Toolbar {
 
     const end = element('div', 'pp-group', this.bar);
     this.timerButton = this.iconButton(end, 'timer', 'Timer', () => this.togglePanel('timer'));
-    this.viewButton = this.iconButton(end, 'monitor', 'Rand um die Folie', () => this.togglePanel('view'));
+    this.moreButton = this.iconButton(end, 'more', 'Mehr', () => this.togglePanel('more'));
     this.pinButton = this.iconButton(end, 'pin', 'Werkzeugleiste fixieren', () =>
       actions.change({ toolbarPinned: !this.state?.preferences.toolbarPinned }),
     );
@@ -207,7 +228,7 @@ export class Toolbar {
   /** Erster Tipp wählt das Werkzeug, der zweite öffnet seine Einstellungen. */
   private onToolTap(tool: Tool): void {
     if (this.state?.preferences.tool === tool) {
-      if (tool !== 'laser') this.togglePanel('tool');
+      this.togglePanel('tool');
       return;
     }
     // Ist gerade ein Feld offen, zeigt es danach die Einstellungen des neuen Werkzeugs.
@@ -220,7 +241,7 @@ export class Toolbar {
     const { preferences } = state;
     for (const [tool, button] of this.toolButtons) {
       button.classList.toggle('is-active', tool === preferences.tool);
-      button.classList.toggle('has-options', tool === preferences.tool && tool !== 'laser');
+      button.classList.toggle('has-options', tool === preferences.tool);
       button.setAttribute('aria-pressed', String(tool === preferences.tool));
     }
     this.renderQuickColors(preferences);
@@ -234,10 +255,10 @@ export class Toolbar {
     this.pageLabel.textContent = `${state.position} / ${state.total}`;
     this.applyPinned(preferences.toolbarPinned);
     this.timerButton.classList.toggle('is-active', state.timerStatus === 'running' || state.timerStatus === 'paused');
-    this.viewButton.classList.toggle('is-active', this.panelOpen && this.panelMode === 'view');
-    if (preferences.tool === 'laser' && this.panelMode === 'tool') this.setPanelOpen(false);
+    this.moreButton.classList.toggle('is-active', this.panelOpen && this.panelMode === 'more');
     this.renderPanel();
-    this.refreshPanelValues?.();
+    // Nur bei offenem Feld: Die Muster zu zeichnen kostet sonst bei jedem Strichende Zeit.
+    if (this.panelOpen) this.refreshPanelValues?.();
   }
 
   /** Die Leiste selbst, damit die Seite ihr ausweichen kann. */
@@ -270,7 +291,7 @@ export class Toolbar {
   private renderQuickColors(preferences: Preferences): void {
     const kind = this.inkKind(preferences);
     this.colorGroup.querySelectorAll('.pp-color').forEach((node) => node.remove());
-    this.colorGroup.style.display = preferences.tool === 'laser' ? 'none' : '';
+    this.colorGroup.style.display = preferences.tool === 'laser' || preferences.tool === 'cover' ? 'none' : '';
     if (!kind) return;
     const quick = kind === 'marker' ? preferences.quickMarker : preferences.quickPen;
     const selected = kind === 'marker' ? preferences.markerColor : preferences.penColor;
@@ -322,7 +343,7 @@ export class Toolbar {
     if (!this.panelOpen || !this.state) return;
     const p = this.state.preferences;
     const key = JSON.stringify([
-      this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode,
+      this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode, p.pointerMode, this.state.more,
       p.tool, p.penType, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
       p.customPen, p.customMarker, this.state.sheetWidth,
     ]);
@@ -331,7 +352,9 @@ export class Toolbar {
     this.panel.replaceChildren();
     this.refreshPanelValues = null;
     if (this.panelMode === 'timer') this.buildTimerPanel(p);
-    else if (this.panelMode === 'view') this.buildViewPanel(p);
+    else if (this.panelMode === 'more') this.buildMorePanel(p);
+    else if (p.tool === 'laser') this.buildPointerPanel(p);
+    else if (p.tool === 'cover') this.buildCoverPanel();
     else if (p.tool === 'pen') this.buildPenPanel(p);
     else if (p.tool === 'marker') this.buildMarkerPanel(p);
     else if (p.tool === 'shape') this.buildShapePanel(p);
@@ -367,15 +390,86 @@ export class Toolbar {
     hint.textContent = 'Die Anzeige lässt sich mit dem Finger verschieben. Ein Tipp darauf hält sie an.';
   }
 
-  private buildViewPanel(p: Preferences): void {
-    const section = this.section('Fläche um die Folie');
-    const modes = element('div', 'pp-chips', section);
+  private buildPointerPanel(p: Preferences): void {
+    const modes = element('div', 'pp-chips', this.section('Zeiger'));
+    this.chip(modes, 'Laserpointer', p.pointerMode === 'laser', () => this.actions.change({ pointerMode: 'laser' }));
+    this.chip(modes, 'Schlüsselloch', p.pointerMode === 'spot', () => this.actions.change({ pointerMode: 'spot' }));
+    if (p.pointerMode !== 'spot') return;
+    const section = this.section('Größe des Sichtfensters');
+    const slider = element('input', 'pp-slider', section);
+    slider.type = 'range';
+    slider.min = '0.06';
+    slider.max = '0.45';
+    slider.step = '0.01';
+    slider.value = String(p.spotSize);
+    slider.setAttribute('aria-label', 'Größe des Sichtfensters');
+    slider.addEventListener('input', () => {
+      this.restartTimer();
+      this.actions.change({ spotSize: Number(slider.value) });
+    });
+    element('div', 'pp-hint', this.panel).textContent = 'Stift oder Finger verschiebt das Sichtfenster. Geblättert wird über die Leiste.';
+  }
+
+  private buildCoverPanel(): void {
+    element('div', 'pp-hint', this.section('Abdecken')).textContent =
+      'Mit dem Stift eine Fläche aufziehen, ein Stifttipp entfernt sie. In der Stunde mit dem Finger wegziehen wie ein Blatt auf dem Overheadprojektor, oder antippen.';
+    const controls = element('div', 'pp-timer-controls', this.panel);
+    this.textButton(controls, 'Alle wieder abdecken', () => this.actions.coverAll());
+    this.textButton(controls, 'Alle entfernen', () => this.actions.coverRemoveAll());
+  }
+
+  private buildMorePanel(p: Preferences): void {
+    const more = (this.state as ToolbarState).more;
+
+    const groups = element('div', 'pp-chips', this.section('Tintenstand'));
+    this.chip(groups, 'Standard', more.group === '', () => this.actions.switchGroup(''));
+    const names = [...new Set([...more.groups, ...more.suggestions, ...(more.group ? [more.group] : [])])];
+    for (const name of names) this.chip(groups, name, more.group === name, () => this.actions.switchGroup(name));
+    const adding = element('div', 'pp-stepper', this.panel.lastElementChild as HTMLElement);
+    const input = element('input', 'pp-text-input', adding);
+    input.type = 'text';
+    input.placeholder = 'Neue Lerngruppe, zum Beispiel 8a';
+    input.setAttribute('aria-label', 'Name der neuen Lerngruppe');
+    this.textButton(adding, 'Anlegen', () => {
+      if (input.value.trim()) this.actions.switchGroup(input.value);
+    });
+
+    if (more.files.length > 1) {
+      const files = element('div', 'pp-chips', this.section('Stundenmappe'));
+      for (const file of more.files) this.chip(files, file.label, file.current, () => this.actions.switchFile(file.path));
+    }
+
+    const lesson = element('div', 'pp-timer-controls', this.section('In der Stunde'));
+    if (more.hasPlan) this.textButton(lesson, more.planRunning ? 'Planzeit aus' : 'Planzeit starten', () => this.actions.togglePlan());
+    this.textButton(lesson, 'Tafel neu entstehen lassen', () => {
+      this.collapse();
+      this.actions.replay();
+    });
+
+    const lineSection = this.section('Zeile hervorheben');
+    const lineRow = element('div', 'pp-stepper', lineSection);
+    const lineInput = element('input', 'pp-text-input', lineRow);
+    lineInput.type = 'number';
+    lineInput.min = '1';
+    lineInput.inputMode = 'numeric';
+    lineInput.placeholder = 'Zeile';
+    lineInput.setAttribute('aria-label', 'Zeilennummer');
+    this.textButton(lineRow, 'Zeigen', () => this.actions.showLine(Number(lineInput.value) || null));
+    this.textButton(lineRow, 'Aus', () => this.actions.showLine(null));
+    if (more.lineMessage) element('div', 'pp-hint', lineSection).textContent = more.lineMessage;
+
+    if (more.canExport) {
+      const exporting = element('div', 'pp-timer-controls', this.section('Sichern'));
+      this.textButton(exporting, 'Als PDF mit Tinte sichern', () => this.actions.exportPdf());
+    }
+
+    const edgeSection = this.section('Fläche um die Folie');
+    const modes = element('div', 'pp-chips', edgeSection);
     const select = (edgeMode: EdgeMode) => () => this.actions.change({ edgeMode });
     this.chip(modes, 'Wie die Folie', p.edgeMode === 'page', select('page'));
     this.chip(modes, 'Schwarz', p.edgeMode === 'black', select('black'));
-    const hint = element('div', 'pp-hint', this.panel);
-    hint.textContent =
-      'Das gilt für die Flächen auf dem iPad. Die Balken links und rechts am Board kommen von der AirPlay-Spiegelung. Dagegen hilft höchstens eine Zoom-Einstellung am Board.';
+    element('div', 'pp-hint', edgeSection).textContent =
+      'Die Balken links und rechts am Board kommen von der AirPlay-Spiegelung. Dagegen hilft höchstens eine Zoom-Einstellung am Board.';
   }
 
   private textButton(parent: HTMLElement, label: string, action: () => void): HTMLButtonElement {

@@ -113,6 +113,58 @@ describe('GestureRouter', () => {
     expect(log).toEqual(['inkStart', 'inkCancel', 'pinch', 'gestureEnd']);
   });
 
+  it('der zweite Finger nach Fingertinte rechnet mit der aktuellen Position', () => {
+    const factors: number[] = [];
+    const moves: number[] = [];
+    const routed = new GestureRouter<PointerInput>({
+      inkStart: () => undefined, inkMove: () => undefined, inkEnd: () => undefined, inkCancel: () => undefined,
+      swipe: () => undefined, tap: () => undefined, pan: () => undefined,
+      pinch: (_cx, _cy, factor, dx) => { factors.push(factor); moves.push(dx); },
+      gestureEnd: () => undefined, isZoomed: () => false, fingerDraws: () => true,
+    });
+    routed.down(input(1, 'touch', 100, 100, 0));
+    routed.move(input(1, 'touch', 500, 100, 400));
+    routed.down(input(2, 'touch', 600, 100, 500));
+    routed.move(input(2, 'touch', 601, 100, 510));
+    expect(factors[0]).toBeCloseTo(1.01, 2);
+    expect(Math.abs(moves[0])).toBeLessThan(2);
+  });
+
+  it('hebt von drei Fingern einer ab, springt der Zoom nicht', () => {
+    const factors: number[] = [];
+    const routed = new GestureRouter<PointerInput>({
+      inkStart: () => undefined, inkMove: () => undefined, inkEnd: () => undefined, inkCancel: () => undefined,
+      swipe: () => undefined, tap: () => undefined, pan: () => undefined,
+      pinch: (_cx, _cy, factor) => factors.push(factor),
+      gestureEnd: () => undefined, isZoomed: () => true, fingerDraws: () => false,
+    });
+    routed.down(input(1, 'touch', 100, 100, 0));
+    routed.down(input(2, 'touch', 200, 100, 10));
+    routed.down(input(3, 'touch', 800, 100, 20));
+    routed.up(input(1, 'touch', 100, 100, 30));
+    routed.move(input(3, 'touch', 801, 100, 40));
+    expect(factors[factors.length - 1]).toBeCloseTo(1, 1);
+  });
+
+  it('der Finger auf einer Abdeckung schiebt sie und blättert nicht', () => {
+    const calls: string[] = [];
+    const routed = new GestureRouter<PointerInput>({
+      inkStart: () => calls.push('ink'), inkMove: () => undefined, inkEnd: () => undefined, inkCancel: () => undefined,
+      swipe: () => calls.push('swipe'), tap: () => calls.push('tap'), pan: () => undefined, pinch: () => undefined,
+      gestureEnd: () => undefined, isZoomed: () => false, fingerDraws: () => false,
+      coverAt: (x) => x < 200,
+      coverDrag: () => calls.push('drag'), coverTap: () => calls.push('coverTap'), coverEnd: () => calls.push('coverEnd'),
+    });
+    routed.down(input(1, 'touch', 100, 100, 0));
+    routed.up(input(1, 'touch', 100, 100, 50));
+    routed.down(input(2, 'touch', 100, 100, 100));
+    routed.move(input(2, 'touch', 180, 100, 150));
+    routed.up(input(2, 'touch', 180, 100, 200));
+    routed.down(input(3, 'touch', 500, 100, 300));
+    routed.up(input(3, 'touch', 500, 100, 350));
+    expect(calls).toEqual(['coverTap', 'drag', 'coverEnd', 'tap']);
+  });
+
   it('setzt der Stift ohne vorheriges Absetzen neu auf, bleibt der alte Strich erhalten', () => {
     router.down(input(1, 'pen', 10, 10, 0));
     router.down(input(2, 'pen', 50, 50, 100));

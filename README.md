@@ -46,9 +46,23 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 
 **Seiten sperren:** In der Seitenübersicht sperrt das Schloss eine Seite, etwa eine Lösung im selben PDF. Blättern überspringt sie, die Übersicht zeigt kein Vorschaubild und die Seitenzahl unten zählt sie nicht mit. Gezeigt werden kann sie erst nach dem Freigeben. Die Sperre wird mit der Tinte gespeichert und bleibt auch nach „Alle Tinte löschen“ stehen.
 
+**Abdecken:** Mit dem Werkzeug „Abdecken“ zieht der Stift Flächen über die Folie, ein Stifttipp entfernt sie. Sie werden gespeichert. In der Stunde zieht der Finger sie weg wie ein Blatt auf dem Overheadprojektor, oder ein Tipp deckt sie ganz auf. Beim nächsten Öffnen liegt wieder alles drauf.
+
+**Zeiger:** Laserpunkt oder Schlüsselloch: Alles ist dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
+
+**Mehr:** Das Feld mit den drei Punkten enthält:
+- **Tintenstand:** eigene Tinte je Lerngruppe. Ein Tintenstand ist eine eigene Datei, „Alle Tinte löschen“ trifft nur den aktuellen. Beim Start aus einem Entwurf mit mehreren Kursen stehen die Kurse schon zur Wahl.
+- **Stundenmappe:** Beim Start aus einem Entwurf die PDFs aus der Zeile „Digital“, ohne Lehrerhand und Lösungen. Der Wechsel verlässt das Vollbild nicht, der Timer läuft weiter.
+- **Planzeit:** eine Zeile mit Minute, Phase und Planende aus dem Verlaufsplan. Nur das, weil die Klasse mitliest.
+- **Tafel neu entstehen lassen:** Die Striche der Seite erscheinen in wenigen Sekunden neu, ein Tipp hält an.
+- **Zeile hervorheben:** Bei PDFs mit Zeilenzählung im Text ein Band über Zeile n.
+- **Als PDF mit Tinte sichern:** neben dem Original, ohne gesperrte Seiten.
+
+In der Seitenübersicht zeigt „Nur beschriebene“ den Ertrag der Stunde. Der Befehl „Verweildauer der letzten Präsentation einfügen“ schreibt eine Zeile für die Reflexion an den Cursor. Der Timer zählt nach dem Ablauf klein weiter.
+
 **Timer:** Das Uhr-Symbol öffnet die Einstellung für Dauer und Größe (klein bis riesig). Die Anzeige liegt über der Folie, lässt sich mit dem Finger verschieben, ein Tipp hält sie an. In der letzten Minute wird sie orange, am Ende rot und blinkt dreimal. „+ 1 Min.“ geht auch, während sie läuft.
 
-**Rand:** Das Bildschirm-Symbol stellt die Fläche um die Folie auf ihre Randfarbe oder auf Schwarz. Die Balken links und rechts am Board kommen von der Spiegelung und lassen sich aus dem Plugin nicht ändern.
+**Rand:** Unter „Mehr“ steht die Fläche um die Folie auf ihrer Randfarbe oder auf Schwarz. Die Balken links und rechts am Board kommen von der Spiegelung und lassen sich aus dem Plugin nicht ändern.
 
 Die Stecknadel fixiert die Leiste: Sie bleibt stehen, und die Seite rückt so weit, dass die Leiste nichts verdeckt. Die Einstellung gilt je Gerät.
 
@@ -122,4 +136,4 @@ Schreiben, Handballen, Wischen, Speichern und scharfe Tinte laufen im Alltag auf
 
 ## Lizenz
 
-MIT, siehe [LICENSE](LICENSE). Enthält [perfect-freehand](https://github.com/steveruizok/perfect-freehand) (MIT) und Symbole von [Lucide](https://lucide.dev) (ISC). PDF-Rendering kommt von dem pdf.js, das Obsidian mitbringt.
+MIT, siehe [LICENSE](LICENSE). Enthält [perfect-freehand](https://github.com/steveruizok/perfect-freehand) (MIT), [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) und Symbole von [Lucide](https://lucide.dev) (ISC). PDF-Rendering kommt von dem pdf.js, das Obsidian mitbringt.

@@ -17,11 +17,13 @@ import {
   withCustomColor,
   withQuickColor,
   type Preferences,
+  type Cover,
   type PresentationSession,
   type Slide,
 } from './session';
-import { TimerWidget } from './timer';
-import { Toolbar } from './toolbar';
+import { findLineBand, planLabel, type PlanRow } from './lessonData';
+import { CountdownTimer, TimerWidget } from './timer';
+import { Toolbar, type MoreState } from './toolbar';
 import type { PdfDocument, Tool } from './types';
 import {
   clampView,
@@ -48,6 +50,10 @@ const DEFAULT_ASPECT = 0.75;
 const MIN_SHAPE_SIZE = 0.004;
 /** Abstand der fixierten Leiste zur Seite und zum Rand */
 const TOOLBAR_GAP = 16;
+const REPLAY_MIN_MS = 4000;
+const REPLAY_MAX_MS = 15_000;
+const REPLAY_MS_PER_STROKE = 60;
+const PLAN_TICK_MS = 15_000;
 
 type InkPointerEvent = PointerEvent;
 
@@ -66,6 +72,17 @@ export interface PresenterOptions {
   session: PresentationSession;
   /** Tinte oder Seiten haben sich geändert */
   onChange?(): void;
+  /** Läuft beim Wechsel in ein anderes PDF der Stunde weiter */
+  timer?: CountdownTimer;
+  /** Daten aus dem Stundenentwurf und dem Tintenordner für das Feld „Mehr“ */
+  more?: Partial<MoreState>;
+  plan?: PlanRow[];
+  /** Startzeit der Planzeit, bleibt beim Wechsel des PDFs erhalten */
+  planStartedAt?: number | null;
+  onPlanChange?(startedAt: number | null): void;
+  onSwitchGroup?(name: string): void;
+  onSwitchFile?(path: string): void;
+  onExportPdf?(): void;
   /** Eine andere Seite wird gezeigt */
   onPageChange?(index: number): void;
   /** Das Gerät schickt die App in den Hintergrund, und iPadOS kann sie danach jederzeit beenden. */
@@ -93,6 +110,19 @@ export class Presenter {
   /** Randfarbe je PDF-Seite. Sie auszulesen kostet auf dem iPad etwas. */
   private edgeColors = new Map<number, string>();
   private edgeColor = '#fff';
+  private coverLayer: HTMLElement;
+  private spot: HTMLElement;
+  private spotAt = { x: 0.5, y: 0.5 };
+  private planElement: HTMLElement;
+  private planTimer = 0;
+  private planStartedAt: number | null = null;
+  private lineMessage = '';
+  private lineToken = 0;
+  /** Wie weit jede Abdeckung in dieser Sitzung weggezogen ist. Beim Öffnen liegt alles wieder drauf. */
+  private coverState = new WeakMap<Cover, { side: 'left' | 'right' | 'top' | 'bottom'; amount: number }>();
+  private dragged: { cover: Cover; base: { side: 'left' | 'right' | 'top' | 'bottom'; amount: number } | null } | null = null;
+  private coverDraft: { start: { x: number; y: number }; end: { x: number; y: number } } | null = null;
+  private replayState: { strokes: Stroke[]; shown: number; startedAt: number; pausedAt: number | null; frame: number } | null = null;
   private laser: Laser;
   private router: GestureRouter<InkPointerEvent>;
   private renderer: PageRenderer;
@@ -132,12 +162,21 @@ export class Presenter {
     this.pageSlot.className = 'pp-page-slot';
     this.sheet.appendChild(this.pageSlot);
     this.stage.appendChild(this.sheet);
+    this.coverLayer = document.createElement('div');
+    this.coverLayer.className = 'pp-cover-layer';
+    this.stage.appendChild(this.coverLayer);
     // Die Tinte liegt nicht auf der Seite, sondern über der Bühne und wird für den sichtbaren
     // Ausschnitt neu gezeichnet. So bleibt sie bei jedem Zoom scharf wie eine Vektorgrafik.
     this.markerLayer = this.layer('pp-layer pp-marker-layer');
     this.inkLayer = this.layer('pp-layer');
     this.transientLayer = this.layer('pp-layer');
     this.root.appendChild(this.stage);
+    this.spot = document.createElement('div');
+    this.spot.className = 'pp-spot';
+    this.stage.appendChild(this.spot);
+    this.planElement = document.createElement('div');
+    this.planElement.className = 'pp-plan';
+    this.root.appendChild(this.planElement);
     document.body.appendChild(this.root);
 
     this.laser = new Laser(this.transientLayer, (context) => this.applyPageTransform(context));
@@ -152,10 +191,15 @@ export class Presenter {
       pinch: (cx, cy, factor, dx, dy) => this.onPinch(cx, cy, factor, dx, dy),
       gestureEnd: () => this.scheduleReraster(),
       isZoomed: () => this.view.zoom > 1.01,
-      fingerDraws: () => this.preferences.fingerDraws,
+      fingerDraws: () => this.preferences.fingerDraws || this.spotActive,
+      coverAt: (x, y) => !this.spotActive && this.visibleCoverAt(x, y) !== null,
+      coverDrag: (x, y, dx, dy) => this.onCoverDrag(x, y, dx, dy),
+      coverTap: (x, y) => this.onCoverTap(x, y),
+      coverEnd: () => (this.dragged = null),
     });
 
     this.timer = new TimerWidget(this.root, {
+      timer: options.timer,
       minutes: this.preferences.timerMinutes,
       size: this.preferences.timerSize,
       x: this.preferences.timerX,
@@ -197,6 +241,14 @@ export class Presenter {
         this.timerChanged();
       },
       timerPreview: (on) => this.timer.setPreview(on),
+      coverAll: () => this.coverAll(),
+      coverRemoveAll: () => this.coverRemoveAll(),
+      replay: () => this.startReplay(),
+      exportPdf: () => options.onExportPdf?.(),
+      switchGroup: (name) => options.onSwitchGroup?.(name),
+      switchFile: (path) => options.onSwitchFile?.(path),
+      togglePlan: () => this.togglePlan(),
+      showLine: (line) => void this.showLine(line),
     });
 
     this.bindInput();
@@ -206,10 +258,17 @@ export class Presenter {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     void this.requestWakeLock();
+    this.planStartedAt = options.planStartedAt ?? null;
     this.syncToolbar();
     this.reserveToolbarSpace();
     this.measureStage();
+    this.renderPlan();
     void this.goTo(this.session.current);
+  }
+
+  /** Damit ein Timer den Wechsel in ein anderes PDF der Stunde übersteht. */
+  get currentTimer(): CountdownTimer {
+    return this.timer.timer;
   }
 
   private layer(className: string): HTMLCanvasElement {
@@ -280,6 +339,10 @@ export class Presenter {
   };
 
   private onTap(clientX: number): void {
+    if (this.replayState) {
+      this.toggleReplayPause();
+      return;
+    }
     const now = performance.now();
     const isDouble = now - this.lastTapTime < DOUBLE_TAP_MS;
     this.lastTapTime = now;
@@ -358,15 +421,21 @@ export class Presenter {
 
   private inkStart(event: PointerEvent): void {
     this.toolbar.collapse();
+    this.stopReplay();
     this.inkRect = this.sheet.getBoundingClientRect();
     this.sampleFilter.start(event);
     const point = this.toPage(event);
     const tool = this.preferences.tool;
     this.laser.stop();
     this.transientLayer.classList.toggle('pp-marker-layer', tool === 'marker');
-    if (tool === 'laser') {
+    if (this.spotActive) {
+      this.moveSpot(event);
+    } else if (tool === 'laser') {
       this.lasering = true;
       this.laser.start(point.x, point.y);
+    } else if (tool === 'cover') {
+      this.coverDraft = { start: point, end: point };
+      this.scheduleLive();
     } else if (tool === 'eraser') {
       this.erasing = true;
       this.slide.ink.beginErase();
@@ -410,7 +479,12 @@ export class Presenter {
 
   private inkSample(event: PointerEvent): void {
     const point = this.toPage(event);
-    if (this.lasering) {
+    if (this.spotActive) {
+      this.moveSpot(event);
+    } else if (this.coverDraft) {
+      this.coverDraft.end = point;
+      this.scheduleLive();
+    } else if (this.lasering) {
       this.laser.move(point.x, point.y);
     } else if (this.erasing) {
       this.eraseAt(point);
@@ -424,7 +498,8 @@ export class Presenter {
 
   private eraseAt(point: { x: number; y: number }): void {
     const { eraserSize, eraserMode } = this.preferences;
-    if (this.slide.ink.eraseAt(point.x, point.y, eraserSize, eraserMode === 'partial')) this.redrawInk();
+    // Höchstens einmal je Bild: Ein Stiftpunkt kann mehrere Treffer je Bild liefern.
+    if (this.slide.ink.eraseAt(point.x, point.y, eraserSize, eraserMode === 'partial')) this.scheduleInkRedraw();
   }
 
   private strokeFromDrag(drag: ShapeDrag): Stroke {
@@ -448,7 +523,13 @@ export class Presenter {
     if (this.liveFrame) return;
     this.liveFrame = requestAnimationFrame(() => {
       this.liveFrame = 0;
-      const stroke = this.activeStroke ?? (this.shapeDrag ? this.strokeFromDrag(this.shapeDrag) : null);
+      const draft = this.coverDraft;
+      const stroke =
+        this.activeStroke ??
+        (this.shapeDrag ? this.strokeFromDrag(this.shapeDrag) : null) ??
+        (draft
+          ? this.strokeFromDrag({ kind: 'pen', type: 'rectangle', color: '#6b7280', width: 0.002, start: draft.start, end: draft.end })
+          : null);
       this.clearCanvas(this.transientLayer);
       if (stroke) this.paint(this.transientLayer, (context) => drawStroke(context, stroke));
     });
@@ -463,8 +544,10 @@ export class Presenter {
   }
 
   private inkEnd(event: PointerEvent | null): void {
-    const changesInk = !this.lasering;
-    if (this.lasering) {
+    const changesInk = !this.lasering && !this.spotActive;
+    if (this.coverDraft) {
+      this.finishCoverDraft();
+    } else if (this.lasering) {
       this.lasering = false;
       this.laser.end();
     } else if (this.erasing) {
@@ -494,6 +577,7 @@ export class Presenter {
     this.inkRect = null;
     this.activeStroke = null;
     this.shapeDrag = null;
+    this.coverDraft = null;
     this.clearTransient();
     if (this.lasering) {
       this.lasering = false;
@@ -623,6 +707,7 @@ export class Presenter {
     savePreferences(this.preferences);
     if (patch.timerSize) this.timer.setSize(patch.timerSize);
     if (patch.edgeMode) this.applyEdge();
+    if ('tool' in patch || 'pointerMode' in patch || 'spotSize' in patch) this.renderSpot();
     this.syncToolbar();
     if ('toolbarPinned' in patch) this.onResize();
   }
@@ -675,6 +760,17 @@ export class Presenter {
       sheetWidth: this.sheetSize.width,
       timerStatus: this.timer.timer.status,
       timerMinutes: this.timer.timer.minutes,
+      more: {
+        group: '',
+        groups: [],
+        suggestions: [],
+        files: [],
+        canExport: false,
+        ...this.options.more,
+        hasPlan: (this.options.plan?.length ?? 0) > 0,
+        planRunning: this.planStartedAt !== null,
+        lineMessage: this.lineMessage,
+      },
     });
   }
 
@@ -689,7 +785,10 @@ export class Presenter {
     if (this.closed) return;
     // Ein Presenter-Klick mitten im Strich: Der Strich gehört noch auf die alte Seite.
     if (this.inkRect) this.inkEnd(null);
+    this.stopReplay();
     this.clearDetail();
+    this.lineToken++;
+    this.lineMessage = '';
     // Auch ein Link auf eine gesperrte Seite zeigt sie nicht.
     const target = this.session.nearestVisible(Math.max(0, Math.min(this.session.slides.length - 1, index)));
     const navigation = ++this.navigation;
@@ -761,9 +860,12 @@ export class Presenter {
       keep.add(slide.pdfPage);
       if (neighbour === index) continue;
       const pageNumber = slide.pdfPage;
+      const navigation = this.navigation;
       void this.renderer
         .aspect(pageNumber)
         .then((aspect) => {
+          // Inzwischen weitergeblättert: Diese Seite würde sonst bis zum nächsten Blättern im Speicher bleiben.
+          if (navigation !== this.navigation) return undefined;
           const sheet = snapSize(fitSheet(this.stageSize, aspect), scale);
           return this.renderer.render(pageNumber, rasterWidth(sheet.width, aspect, scale, MAX_PAGE_PIXELS));
         })
@@ -806,9 +908,13 @@ export class Presenter {
     this.sheetSize = snapSize(fitSheet(this.stageSize, this.aspect), this.pixelRatio);
     this.sheet.style.width = `${this.sheetSize.width}px`;
     this.sheet.style.height = `${this.sheetSize.height}px`;
+    this.coverLayer.style.width = this.sheet.style.width;
+    this.coverLayer.style.height = this.sheet.style.height;
     this.sizeLayers();
     this.applyView(this.view);
     this.redrawInk();
+    this.renderCovers();
+    this.renderSpot();
   }
 
   private applyView(view: ViewState): void {
@@ -816,6 +922,7 @@ export class Presenter {
     const changed = next.zoom !== this.view.zoom || next.x !== this.view.x || next.y !== this.view.y;
     this.view = next;
     this.sheet.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.zoom})`;
+    this.coverLayer.style.transform = this.sheet.style.transform;
     if (!changed) return;
     // Der scharfe Ausschnitt passt nicht mehr. Bis zum Ende der Geste trägt die skalierte Seite.
     this.clearDetail();
@@ -894,6 +1001,239 @@ export class Presenter {
     }
   }
 
+  // ---------- Schlüsselloch ----------
+
+  private get spotActive(): boolean {
+    return this.preferences.tool === 'laser' && this.preferences.pointerMode === 'spot';
+  }
+
+  private moveSpot(event: PointerEvent): void {
+    const rect = this.stage.getBoundingClientRect();
+    this.spotAt = { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
+    this.renderSpot();
+  }
+
+  private renderSpot(): void {
+    this.spot.classList.toggle('is-visible', this.spotActive);
+    if (!this.spotActive) return;
+    const radius = this.preferences.spotSize * Math.min(this.stageSize.width, this.stageSize.height);
+    this.spot.style.width = `${radius * 2}px`;
+    this.spot.style.height = `${radius * 2}px`;
+    this.spot.style.left = `${this.spotAt.x * this.stageSize.width - radius}px`;
+    this.spot.style.top = `${this.spotAt.y * this.stageSize.height - radius}px`;
+  }
+
+  // ---------- Abdecken ----------
+
+  private coverPage(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.sheet.getBoundingClientRect();
+    return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.width };
+  }
+
+  /** Die oberste Abdeckung, die an dieser Stelle noch sichtbar ist. */
+  private visibleCoverAt(clientX: number, clientY: number): Cover | null {
+    const { x, y } = this.coverPage(clientX, clientY);
+    for (let i = this.slide.covers.length - 1; i >= 0; i--) {
+      const cover = this.slide.covers[i];
+      if (x < cover.x || x > cover.x + cover.w || y < cover.y || y > cover.y + cover.h) continue;
+      const state = this.coverState.get(cover);
+      if (!state) return cover;
+      const u = (x - cover.x) / cover.w;
+      const v = (y - cover.y) / cover.h;
+      const open =
+        state.side === 'left' ? u < state.amount : state.side === 'right' ? u > 1 - state.amount : state.side === 'top' ? v < state.amount : v > 1 - state.amount;
+      if (!open) return cover;
+    }
+    return null;
+  }
+
+  private onCoverTap(clientX: number, clientY: number): void {
+    const cover = this.visibleCoverAt(clientX, clientY);
+    if (!cover) return;
+    this.coverState.set(cover, { side: 'left', amount: 1 });
+    this.renderCovers();
+  }
+
+  /** Das Blatt folgt der Hand: Das Tempo kommt vom Finger, nicht von einer festen Animation. */
+  private onCoverDrag(startX: number, startY: number, dx: number, dy: number): void {
+    if (!this.dragged) {
+      const cover = this.visibleCoverAt(startX, startY);
+      if (!cover) return;
+      this.dragged = { cover, base: this.coverState.get(cover) ?? null };
+    }
+    const { cover, base } = this.dragged;
+    const rect = this.sheet.getBoundingClientRect();
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
+    const side = base?.side ?? (horizontal ? (dx > 0 ? 'left' : 'right') : dy > 0 ? 'top' : 'bottom');
+    const along = side === 'left' ? dx / (cover.w * rect.width) : side === 'right' ? -dx / (cover.w * rect.width) : side === 'top' ? dy / (cover.h * rect.width) : -dy / (cover.h * rect.width);
+    const amount = Math.max(0, Math.min(1, (base?.amount ?? 0) + along));
+    this.coverState.set(cover, { side, amount });
+    this.renderCovers();
+  }
+
+  private renderCovers(): void {
+    const nodes = this.slide.covers.map((cover) => {
+      const frame = document.createElement('div');
+      frame.className = 'pp-cover';
+      frame.style.left = `${(cover.x / 1) * 100}%`;
+      frame.style.width = `${cover.w * 100}%`;
+      // Höhe und Lage in Seitenbreiten, die Ebene ist aber aspect-mal so hoch wie breit.
+      frame.style.top = `${(cover.y / this.aspect) * 100}%`;
+      frame.style.height = `${(cover.h / this.aspect) * 100}%`;
+      const sheet = document.createElement('div');
+      sheet.className = 'pp-cover-sheet';
+      const state = this.coverState.get(cover);
+      if (state) {
+        const percent = state.amount * 100;
+        const moves = { left: `translateX(${percent}%)`, right: `translateX(${-percent}%)`, top: `translateY(${percent}%)`, bottom: `translateY(${-percent}%)` };
+        sheet.style.transform = moves[state.side];
+      }
+      frame.appendChild(sheet);
+      return frame;
+    });
+    this.coverLayer.replaceChildren(...nodes, ...(this.lineBand ? [this.lineBand] : []));
+  }
+
+  private finishCoverDraft(): void {
+    const draft = this.coverDraft;
+    this.coverDraft = null;
+    this.clearTransient();
+    if (!draft) return;
+    const { start, end } = draft;
+    const size = Math.hypot(end.x - start.x, end.y - start.y);
+    if (size < 0.008) {
+      // Ein Stifttipp entfernt die Abdeckung unter ihm.
+      const index = this.slide.covers.findIndex(
+        (cover) => start.x >= cover.x && start.x <= cover.x + cover.w && start.y >= cover.y && start.y <= cover.y + cover.h,
+      );
+      if (index >= 0) this.slide.covers.splice(index, 1);
+    } else {
+      this.slide.covers.push({
+        x: Math.min(start.x, end.x),
+        y: Math.min(start.y, end.y),
+        w: Math.abs(end.x - start.x),
+        h: Math.abs(end.y - start.y),
+      });
+    }
+    this.renderCovers();
+    this.options.onChange?.();
+  }
+
+  private coverAll(): void {
+    this.coverState = new WeakMap();
+    this.renderCovers();
+  }
+
+  private coverRemoveAll(): void {
+    this.slide.covers = [];
+    this.renderCovers();
+    this.options.onChange?.();
+  }
+
+  // ---------- Zeile hervorheben ----------
+
+  private lineBand: HTMLElement | null = null;
+
+  private async showLine(line: number | null): Promise<void> {
+    const token = ++this.lineToken;
+    this.lineBand = null;
+    this.lineMessage = '';
+    const page = this.slide.pdfPage;
+    if (line !== null && page !== null) {
+      let items: Awaited<ReturnType<PageRenderer['textItems']>> = [];
+      try {
+        items = await this.renderer.textItems(page);
+      } catch {
+        items = [];
+      }
+      if (token !== this.lineToken || this.closed) return;
+      const band = findLineBand(items, line);
+      if (band) {
+        const node = document.createElement('div');
+        node.className = 'pp-line-band';
+        node.style.left = `${band.x * 100}%`;
+        node.style.width = `${band.width * 100}%`;
+        node.style.top = `${(band.y / this.aspect) * 100}%`;
+        node.style.height = `${(band.height / this.aspect) * 100}%`;
+        this.lineBand = node;
+        this.toolbar.collapse();
+      } else {
+        this.lineMessage = `Zeile ${line} ließ sich auf dieser Seite nicht finden. Es braucht eine Zeilenzählung im PDF-Text.`;
+      }
+    }
+    this.renderCovers();
+    this.syncToolbar();
+  }
+
+  // ---------- Tafel neu entstehen lassen ----------
+
+  private startReplay(): void {
+    this.stopReplay();
+    const strokes = this.slide.ink.strokes;
+    if (!strokes.length) return;
+    this.clearCanvas(this.markerLayer);
+    this.clearCanvas(this.inkLayer);
+    this.replayState = { strokes, shown: 0, startedAt: performance.now(), pausedAt: null, frame: 0 };
+    this.replayState.frame = requestAnimationFrame(() => this.replayFrame());
+  }
+
+  private replayFrame(): void {
+    const state = this.replayState;
+    if (!state || state.pausedAt !== null) return;
+    const duration = Math.min(REPLAY_MAX_MS, Math.max(REPLAY_MIN_MS, state.strokes.length * REPLAY_MS_PER_STROKE));
+    const target = Math.min(state.strokes.length, Math.ceil(((performance.now() - state.startedAt) / duration) * state.strokes.length));
+    while (state.shown < target) this.paintStroke(state.strokes[state.shown++]);
+    if (state.shown >= state.strokes.length) {
+      this.replayState = null;
+      return;
+    }
+    state.frame = requestAnimationFrame(() => this.replayFrame());
+  }
+
+  /** Antippen hält an, damit die Klasse sagen kann, was als Nächstes kam. */
+  private toggleReplayPause(): void {
+    const state = this.replayState;
+    if (!state) return;
+    if (state.pausedAt === null) {
+      state.pausedAt = performance.now();
+      cancelAnimationFrame(state.frame);
+    } else {
+      state.startedAt += performance.now() - state.pausedAt;
+      state.pausedAt = null;
+      state.frame = requestAnimationFrame(() => this.replayFrame());
+    }
+  }
+
+  private stopReplay(): void {
+    if (!this.replayState) return;
+    cancelAnimationFrame(this.replayState.frame);
+    this.replayState = null;
+    this.redrawInk();
+  }
+
+  // ---------- Planzeit ----------
+
+  private togglePlan(): void {
+    this.planStartedAt = this.planStartedAt === null ? Date.now() : null;
+    this.options.onPlanChange?.(this.planStartedAt);
+    this.renderPlan();
+    this.syncToolbar();
+  }
+
+  private renderPlan(): void {
+    window.clearInterval(this.planTimer);
+    const rows = this.options.plan;
+    const running = this.planStartedAt !== null && !!rows?.length;
+    this.planElement.classList.toggle('is-visible', running);
+    if (!running || !rows) return;
+    const update = () => {
+      const minute = Math.floor((Date.now() - (this.planStartedAt as number)) / 60_000);
+      this.planElement.textContent = planLabel(rows, minute);
+    };
+    update();
+    this.planTimer = window.setInterval(update, PLAN_TICK_MS);
+  }
+
   // ---------- Übersicht ----------
 
   private openOverview(): void {
@@ -961,6 +1301,9 @@ export class Presenter {
     this.closed = true;
     this.navigation++;
     window.clearTimeout(this.rerasterTimer);
+    window.clearInterval(this.planTimer);
+    if (this.replayState) cancelAnimationFrame(this.replayState.frame);
+    this.replayState = null;
     cancelAnimationFrame(this.inkFrame);
     cancelAnimationFrame(this.liveFrame);
     this.clearDetail();

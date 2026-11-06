@@ -3,6 +3,7 @@
 export interface PdfViewport {
   width: number;
   height: number;
+  convertToViewportPoint?(x: number, y: number): number[];
 }
 
 export interface PdfRenderTask {
@@ -18,6 +19,7 @@ export interface PdfPage {
     viewport: PdfViewport;
   }): PdfRenderTask;
   cleanup?(): unknown;
+  getTextContent?(): Promise<{ items: { str?: string; transform?: number[]; width?: number }[] }>;
 }
 
 export interface PdfDocument {
@@ -26,4 +28,4 @@ export interface PdfDocument {
   destroy(): unknown;
 }
 
-export type Tool = 'laser' | 'pen' | 'marker' | 'eraser' | 'shape';
+export type Tool = 'laser' | 'pen' | 'marker' | 'eraser' | 'shape' | 'cover';

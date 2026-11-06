@@ -111,9 +111,28 @@ function distanceToSegment(px: number, py: number, a: InkPoint, b: InkPoint): nu
   return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
 }
 
+/** Begrenzungsbox je Strich, damit der Radierer nicht jeden Punkt jedes Strichs prüfen muss. */
+const boxCache = new WeakMap<Stroke, { length: number; minX: number; maxX: number; minY: number; maxY: number }>();
+
+function boxOf(stroke: Stroke) {
+  const cached = boxCache.get(stroke);
+  if (cached && cached.length === stroke.points.length) return cached;
+  const box = { length: stroke.points.length, minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (const point of stroke.points) {
+    box.minX = Math.min(box.minX, point.x);
+    box.maxX = Math.max(box.maxX, point.x);
+    box.minY = Math.min(box.minY, point.y);
+    box.maxY = Math.max(box.maxY, point.y);
+  }
+  boxCache.set(stroke, box);
+  return box;
+}
+
 export function strokeHit(stroke: Stroke, x: number, y: number, radius: number): boolean {
   const reach = radius + stroke.width / 2;
   const { points } = stroke;
+  const box = boxOf(stroke);
+  if (x < box.minX - reach || x > box.maxX + reach || y < box.minY - reach || y > box.maxY + reach) return false;
   if (points.length === 1) return Math.hypot(x - points[0].x, y - points[0].y) <= reach;
   for (let i = 1; i < points.length; i++) {
     if (distanceToSegment(x, y, points[i - 1], points[i]) <= reach) return true;

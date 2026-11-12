@@ -1,4 +1,5 @@
 import { PageInk, type PenType, type ShapeType, type Smoothing } from './ink';
+import type { TimerSound } from './sound';
 import type { StoredSlide } from './inkFile';
 import type { TimerSize } from './timer';
 import type { Tool } from './types';
@@ -126,6 +127,33 @@ export class PresentationSession {
 
 export type EraserMode = 'stroke' | 'partial';
 export type EdgeMode = 'page' | 'black';
+export type TimerEffect = 'blink' | 'pulse' | 'flash' | 'none';
+
+/** Ein Stift in der Ablage: alles, was ihn ausmacht, mit einem Tipp wieder da */
+export interface PenSlot {
+  color: string;
+  penType: PenType;
+  width: number;
+  smoothing: Smoothing;
+}
+
+export const PEN_SLOTS = 4;
+
+export const TIMER_COLORS: NamedColor[] = [
+  { name: 'Dunkel', value: '#141416' },
+  { name: 'Blau', value: '#1f4fa8' },
+  { name: 'Grün', value: '#17703a' },
+  { name: 'Lila', value: '#6b3fa0' },
+  { name: 'Petrol', value: '#0f6e78' },
+  { name: 'Weiß', value: '#ffffff' },
+];
+
+export const TIMER_EFFECTS: { effect: TimerEffect; label: string }[] = [
+  { effect: 'blink', label: 'Blinken' },
+  { effect: 'pulse', label: 'Pulsieren' },
+  { effect: 'flash', label: 'Aufleuchten' },
+  { effect: 'none', label: 'Nichts' },
+];
 export type PointerMode = 'laser' | 'spot';
 
 export interface Preferences {
@@ -153,6 +181,15 @@ export interface Preferences {
   /** Mitte der Timeranzeige als Anteil des Bildschirms */
   timerX: number;
   timerY: number;
+  /** Hintergrund der Timeranzeige. Warnung und Ablauf färben weiter orange und rot. */
+  timerColor: string;
+  timerEffect: TimerEffect;
+  timerSound: TimerSound;
+  /** Stift am Ende stehen lassen macht aus dem Strich eine Linie oder Form */
+  holdToShape: boolean;
+  penSlots: PenSlot[];
+  /** Zuletzt gewähltes Fach: Dorthin legt „Ablegen“ den aktuellen Stift */
+  penSlot: number;
   /** Fläche um die Folie: in der Farbe des Folienrands oder schwarz */
   edgeMode: EdgeMode;
   /** Die Schnellfarben in der Leiste */
@@ -232,7 +269,7 @@ const CUSTOM_COLORS = 6;
 const STORAGE_KEY = 'pdf-praesentation-einstellungen';
 const POSITION_PREFIX = 'pdf-praesentation-seite:';
 const GROUP_PREFIX = 'pdf-praesentation-gruppe:';
-const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape', 'cover'];
+const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape', 'cover', 'lasso'];
 
 const DEFAULTS: Preferences = {
   tool: 'pen',
@@ -254,6 +291,12 @@ const DEFAULTS: Preferences = {
   timerSize: 'medium',
   timerX: 0.9,
   timerY: 0.1,
+  timerColor: '#141416',
+  timerEffect: 'blink',
+  timerSound: 'off',
+  holdToShape: true,
+  penSlots: [],
+  penSlot: 0,
   edgeMode: 'page',
   quickPen: ['#111111', '#d92626', '#1f5fd6', '#1a8f3c'],
   quickMarker: ['#ffe14d', '#7ee081', '#ff9ecb', '#8fd3ff'],
@@ -279,7 +322,42 @@ export function normalizePreferences(stored: unknown): Preferences {
   for (const key of ['quickPen', 'quickMarker', 'customPen', 'customMarker'] as const) {
     if (!Array.isArray(preferences[key])) preferences[key] = DEFAULTS[key];
   }
+  if (typeof preferences.timerColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(preferences.timerColor)) preferences.timerColor = DEFAULTS.timerColor;
+  if (!['blink', 'pulse', 'flash', 'none'].includes(preferences.timerEffect)) preferences.timerEffect = DEFAULTS.timerEffect;
+  if (!['off', 'gong', 'bell', 'chime', 'beep'].includes(preferences.timerSound)) preferences.timerSound = DEFAULTS.timerSound;
+  if (typeof preferences.holdToShape !== 'boolean') preferences.holdToShape = DEFAULTS.holdToShape;
+  preferences.penSlots = normalizePenSlots(preferences.penSlots, preferences);
+  if (!Number.isInteger(preferences.penSlot) || preferences.penSlot < 0 || preferences.penSlot >= PEN_SLOTS) preferences.penSlot = 0;
   return preferences;
+}
+
+/** Die Ablage hat immer vier Fächer. Wer sie noch nie gefüllt hat, bekommt die Schnellfarben als Stifte. */
+function normalizePenSlots(stored: unknown, preferences: Preferences): PenSlot[] {
+  const valid = (slot: unknown): slot is PenSlot => {
+    const s = slot as PenSlot;
+    return (
+      typeof s === 'object' && s !== null &&
+      typeof s.color === 'string' &&
+      ['ball', 'fountain', 'fineliner', 'brush'].includes(s.penType) &&
+      typeof s.width === 'number' && s.width > 0 &&
+      ['off', 'light', 'strong'].includes(s.smoothing)
+    );
+  };
+  const slots = Array.isArray(stored) ? stored.filter(valid).slice(0, PEN_SLOTS) : [];
+  const colors = preferences.quickPen.length ? preferences.quickPen : DEFAULTS.quickPen;
+  for (let i = slots.length; i < PEN_SLOTS; i++) {
+    slots.push({ color: colors[i % colors.length], penType: preferences.penType, width: preferences.penWidth, smoothing: preferences.penSmoothing });
+  }
+  return slots;
+}
+
+export function slotMatches(slot: PenSlot, preferences: Preferences): boolean {
+  return (
+    slot.color === preferences.penColor &&
+    slot.penType === preferences.penType &&
+    Math.abs(slot.width - preferences.penWidth) < 1e-6 &&
+    slot.smoothing === preferences.penSmoothing
+  );
 }
 
 /** Eine neue Farbe ersetzt die letzte Schnellfarbe. Die Reihenfolge der übrigen bleibt, damit die Hand sie wiederfindet. */

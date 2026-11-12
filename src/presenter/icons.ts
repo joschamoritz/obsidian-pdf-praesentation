@@ -3,12 +3,14 @@ import chevronLeft from 'lucide-static/icons/chevron-left.svg';
 import chevronRight from 'lucide-static/icons/chevron-right.svg';
 import circle from 'lucide-static/icons/circle.svg';
 import circleDot from 'lucide-static/icons/circle-dot.svg';
+import copy from 'lucide-static/icons/copy.svg';
 import ellipsis from 'lucide-static/icons/ellipsis.svg';
 import eraser from 'lucide-static/icons/eraser.svg';
 import eyeOff from 'lucide-static/icons/eye-off.svg';
 import filePlus from 'lucide-static/icons/file-plus-2.svg';
 import hand from 'lucide-static/icons/hand.svg';
 import highlighter from 'lucide-static/icons/highlighter.svg';
+import lasso from 'lucide-static/icons/lasso.svg';
 import layoutGrid from 'lucide-static/icons/layout-grid.svg';
 import monitor from 'lucide-static/icons/monitor.svg';
 import lock from 'lucide-static/icons/lock.svg';
@@ -33,6 +35,7 @@ export const icons = {
   chevronLeft,
   chevronRight,
   close,
+  copy,
   cover: eyeOff,
   ellipse: circle,
   more: ellipsis,
@@ -41,6 +44,7 @@ export const icons = {
   hand,
   highlighter,
   laser: circleDot,
+  lasso,
   layoutGrid,
   line: slash,
   lock,

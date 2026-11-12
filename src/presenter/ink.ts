@@ -226,6 +226,25 @@ export class PageInk {
     this.eraseBase = null;
   }
 
+  /** Eine Änderung über mehrere Bilder, etwa Verschieben mit dem Lasso: ein einziger Schritt für Rückgängig. */
+  beginChange(): void {
+    this.eraseBase = this.strokes;
+  }
+
+  setStrokes(strokes: Stroke[]): void {
+    this.strokes = strokes;
+  }
+
+  endChange(): void {
+    this.endErase();
+  }
+
+  /** Eine Änderung in einem Zug, etwa Löschen oder Kopieren einer Auswahl */
+  replace(strokes: Stroke[]): void {
+    this.remember(this.strokes);
+    this.strokes = strokes;
+  }
+
   clear(): void {
     if (!this.strokes.length) return;
     this.remember(this.strokes);

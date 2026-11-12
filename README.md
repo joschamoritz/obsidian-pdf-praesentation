@@ -39,8 +39,11 @@ Danach in Obsidian unter *Einstellungen → Community-Plugins* einschalten. Mit 
 | Marker | freihand oder gerade · Strichstärke · 8 Farben und eigene |
 | Formen | Linie, Pfeil, Rechteck, Ellipse · Strichstärke und Farbe des Stifts |
 | Radierer | ganzer Strich oder nur die Stelle · Größe |
+| Lasso | Tinte umkreisen, dann mit dem Stift verschieben, kopieren oder löschen. Die kleine Leiste über der Auswahl hat Kopieren, Löschen und Aufheben |
 
-Die vier Farben in der Leiste sind Schnellfarben: Eine neu gewählte Farbe ersetzt die letzte.
+**Stiftablage:** Beim Stift stehen in der Leiste vier Fächer. Jedes Fach merkt sich Farbe, Stiftart, Strichstärke und Glättung, ein Tipp nimmt den ganzen Stift. Je dicker der Stift, desto größer der Punkt. Im Einstellungsfeld legt „Aktuellen Stift in Fach n ablegen“ den eingestellten Stift in das zuletzt gewählte Fach. Bei Marker und Formen sind es weiter vier Schnellfarben: Eine neu gewählte Farbe ersetzt die letzte.
+
+**Zeichnen und halten:** Bleibt der Stift am Ende eines Strichs kurz stehen, wird aus dem Strich eine gerade Linie, ein Rechteck oder eine Ellipse. Bei der Linie folgt das Ende dem Stift, bis er abgesetzt wird. Schrift und kleine Buchstaben bleiben, wie sie sind. Abschaltbar bei Stift und Marker.
 
 Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblättert wird dann über die Leiste, gezoomt weiter mit zwei Fingern.
 
@@ -51,6 +54,7 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 **Zeiger:** Laserpunkt oder Schlüsselloch: Alles ist dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
 
 **Mehr:** Das Feld mit den drei Punkten enthält:
+- **Leere Seite einfügen** hinter der aktuellen Seite.
 - **Tintenstand:** eigene Tinte je Lerngruppe. Ein Tintenstand ist eine eigene Datei, „Alle Tinte löschen“ trifft nur den aktuellen. Beim Start aus einem Entwurf mit mehreren Kursen stehen die Kurse schon zur Wahl.
 - **Stundenmappe:** Beim Start aus einem Entwurf die PDFs aus der Zeile „Digital“, ohne Lehrerhand und Lösungen. Der Wechsel verlässt das Vollbild nicht, der Timer läuft weiter.
 - **Planzeit:** eine Zeile mit Minute, Phase und Planende aus dem Verlaufsplan. Nur das, weil die Klasse mitliest.
@@ -60,7 +64,7 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 
 In der Seitenübersicht zeigt „Nur beschriebene“ den Ertrag der Stunde. Der Befehl „Verweildauer der letzten Präsentation einfügen“ schreibt eine Zeile für die Reflexion an den Cursor. Der Timer zählt nach dem Ablauf klein weiter.
 
-**Timer:** Das Uhr-Symbol öffnet die Einstellung für Dauer und Größe (klein bis riesig). Die Anzeige liegt über der Folie, lässt sich mit dem Finger verschieben, ein Tipp hält sie an. In der letzten Minute wird sie orange, am Ende rot und blinkt dreimal. „+ 1 Min.“ geht auch, während sie läuft.
+**Timer:** Das Uhr-Symbol öffnet die Einstellung für Dauer und Größe (klein bis riesig). Die Anzeige liegt über der Folie, lässt sich mit dem Finger verschieben, ein Tipp hält sie an. In der letzten Minute wird sie orange, am Ende rot. Farbe der Anzeige, Effekt bei null (Blinken, Pulsieren, Aufleuchten der ganzen Fläche oder nichts) und ein Ton (Gong, Glocke, Dreiklang, Piepton oder aus) sind wählbar, „Ende vorführen“ zeigt beides zur Probe. Der Ton kommt über AirPlay aus den Lautsprechern am Board. Das iPad gibt Ton erst nach einer Berührung frei, das übernimmt der Start des Timers. „+ 1 Min.“ geht auch, während sie läuft.
 
 **Rand:** Unter „Mehr“ steht die Fläche um die Folie auf ihrer Randfarbe oder auf Schwarz. Die Balken links und rechts am Board kommen von der Spiegelung und lassen sich aus dem Plugin nicht ändern.
 

@@ -1,6 +1,6 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 11.11.2026 (v0.10.0).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.12.0).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
 ## Als Nächstes
@@ -48,13 +48,21 @@ Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
 **Entscheidung offen:** Lohnt der Aufwand für randlose Folien und eine Ansicht nur für die Lehrkraft? AirPlay bleibt in jedem Fall der Rückweg.
 
+## Gebaut in v0.12.0, am iPad noch zu prüfen
+
+| Funktion | Worauf achten |
+|---|---|
+| **Timer:** Farbe, Effekt bei null (Blinken, Pulsieren, Aufleuchten), Ton (Gong, Glocke, Dreiklang, Piepton) | Kommt der Ton über AirPlay am Board an? Klingt er auch bei eingeschaltetem Stummschalter? Ist er laut genug? |
+| **Zeichnen und halten:** Linie, Rechteck, Ellipse nach 0,55 s Stillstand | Löst es beim Schreiben ungewollt aus, etwa bei einer Denkpause mit aufgesetztem Stift? Dann Wartezeit verlängern oder Mindestgröße erhöhen |
+| **Lasso:** umkreisen, verschieben, kopieren, löschen; „Leere Seite einfügen“ dafür ins Mehr-Feld | Fängt das Lasso Schrift sauber ein? Ruckelt das Verschieben bei vielen Strichen? |
+| **Stiftablage:** vier Fächer statt Schnellfarben beim Stift | Ist das Ablegen verständlich? Reichen vier Fächer? |
+
 ## Weitere Ideen
 
 | Idee | Herkunft | Was sie täte |
 |---|---|---|
-| Lasso | OwlLuna, GoodNotes | Tinte auswählen und verschieben |
-| Zeichnen und halten | OwlLuna, GoodNotes | Stift am Ende stehen lassen, der Strich wird zur geraden Linie oder Form |
-| Stiftablage | OwlLuna | feste Stifte, jeder mit eigener Art, Farbe und Stärke |
+| Lasso: Farbe oder Größe der Auswahl ändern | GoodNotes | Auswahl umfärben oder vergrößern |
+| Zeichnen und halten: Dreieck und Pfeil erkennen | GoodNotes | weitere Formen |
 
 ## Noch zu prüfen
 - **Zoom-Einstellung am Board:** Nimmt sie die seitlichen Balken der AirPlay-Spiegelung weg?

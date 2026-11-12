@@ -5,13 +5,18 @@ import {
   PEN_PALETTE,
   PEN_TYPES,
   SMOOTHING_LEVELS,
+  TIMER_COLORS,
+  TIMER_EFFECTS,
+  slotMatches,
   sliderToWidth,
   widthToSlider,
   type EdgeMode,
   type EraserMode,
+  type PenSlot,
   type Preferences,
   type WidthRange,
 } from './session';
+import { TIMER_SOUNDS } from './sound';
 import type { TimerSize, TimerStatus } from './timer';
 import type { Tool } from './types';
 
@@ -34,6 +39,13 @@ export interface ToolbarActions {
   timerReset(): void;
   /** Das Timerfeld ist offen: Die Anzeige zeigt schon Größe und Lage. */
   timerPreview(on: boolean): void;
+  /** Effekt und Ton zur Probe; gibt dabei auch den Ton auf dem iPad frei */
+  timerPreviewEnd(): void;
+  selectPenSlot(index: number): void;
+  storePenSlot(): void;
+  lassoDelete(): void;
+  lassoDuplicate(): void;
+  lassoClear(): void;
   coverAll(): void;
   coverRemoveAll(): void;
   replay(): void;
@@ -71,6 +83,8 @@ export interface ToolbarState {
   sheetWidth: number;
   timerStatus: TimerStatus;
   timerMinutes: number;
+  /** Mit dem Lasso ist etwas ausgewählt */
+  hasSelection: boolean;
   more: MoreState;
 }
 
@@ -85,6 +99,7 @@ const TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'shape', icon: 'shapes', label: 'Formen' },
   { tool: 'eraser', icon: 'eraser', label: 'Radierer' },
   { tool: 'cover', icon: 'cover', label: 'Abdecken' },
+  { tool: 'lasso', icon: 'lasso', label: 'Lasso' },
 ];
 
 const TIMER_MINUTES = [1, 2, 3, 5, 10, 15, 20, 30];
@@ -205,7 +220,6 @@ export class Toolbar {
     this.pageLabel = element('span', 'pp-page-label', pages);
     this.nextButton = this.iconButton(pages, 'chevronRight', 'Nächste Seite', () => actions.next());
     this.iconButton(pages, 'layoutGrid', 'Seitenübersicht', () => actions.overview());
-    this.iconButton(pages, 'filePlus', 'Leere Seite einfügen', () => actions.insertBlank());
 
     const end = element('div', 'pp-group', this.bar);
     this.timerButton = this.iconButton(end, 'timer', 'Timer', () => this.togglePanel('timer'));
@@ -292,14 +306,38 @@ export class Toolbar {
   private renderQuickColors(preferences: Preferences): void {
     const kind = this.inkKind(preferences);
     this.colorGroup.querySelectorAll('.pp-color').forEach((node) => node.remove());
-    this.colorGroup.style.display = preferences.tool === 'laser' || preferences.tool === 'cover' ? 'none' : '';
+    this.colorGroup.style.display = ['laser', 'cover', 'lasso'].includes(preferences.tool) ? 'none' : '';
     if (!kind) return;
+    if (preferences.tool === 'pen') {
+      preferences.penSlots.forEach((slot, index) => this.colorGroup.insertBefore(this.slotButton(slot, index, preferences), this.optionsButton));
+      return;
+    }
     const quick = kind === 'marker' ? preferences.quickMarker : preferences.quickPen;
     const selected = kind === 'marker' ? preferences.markerColor : preferences.penColor;
     for (const color of quick) {
       const button = this.colorButton(color, this.colorName(color), color === selected);
       this.colorGroup.insertBefore(button, this.optionsButton);
     }
+  }
+
+  /** Ein Fach der Stiftablage: Farbe als Punkt, je dicker der Stift, desto größer der Punkt */
+  private slotButton(slot: PenSlot, index: number, preferences: Preferences): HTMLButtonElement {
+    const selected = slotMatches(slot, preferences);
+    const type = PEN_TYPES.find((entry) => entry.type === slot.penType)?.label ?? 'Stift';
+    const name = `Fach ${index + 1}: ${type}, ${this.colorName(slot.color)}`;
+    const button = document.createElement('button');
+    button.className = 'pp-button pp-color pp-slot';
+    button.title = name;
+    button.setAttribute('aria-label', name);
+    button.setAttribute('aria-pressed', String(selected));
+    button.classList.toggle('is-active', selected);
+    const swatch = element('span', 'pp-swatch', button);
+    swatch.style.background = slot.color;
+    const size = 12 + 14 * Math.max(0, Math.min(1, widthToSlider('pen', slot.width)));
+    swatch.style.width = `${size}px`;
+    swatch.style.height = `${size}px`;
+    button.addEventListener('click', () => this.actions.selectPenSlot(index));
+    return button;
   }
 
   private colorName(color: string): string {
@@ -345,6 +383,7 @@ export class Toolbar {
     const p = this.state.preferences;
     const key = JSON.stringify([
       this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode, p.pointerMode, this.state.more,
+      p.timerColor, p.timerEffect, p.timerSound, p.holdToShape, p.penSlots, p.penSlot, this.state.hasSelection,
       p.tool, p.penType, p.penSmoothing, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
       p.customPen, p.customMarker, this.state.sheetWidth,
     ]);
@@ -360,6 +399,7 @@ export class Toolbar {
     else if (p.tool === 'marker') this.buildMarkerPanel(p);
     else if (p.tool === 'shape') this.buildShapePanel(p);
     else if (p.tool === 'eraser') this.buildEraserPanel(p);
+    else if (p.tool === 'lasso') this.buildLassoPanel();
   }
 
   private buildTimerPanel(p: Preferences): void {
@@ -378,6 +418,29 @@ export class Toolbar {
       this.chip(sizes, label, p.timerSize === size, () => this.actions.change({ timerSize: size }));
     }
 
+    const colors = element('div', 'pp-colors', this.section('Farbe'));
+    for (const { name, value } of TIMER_COLORS) {
+      const button = element('button', 'pp-button pp-color', colors);
+      button.title = name;
+      button.setAttribute('aria-label', `Timerfarbe ${name}`);
+      button.setAttribute('aria-pressed', String(p.timerColor === value));
+      button.classList.toggle('is-active', p.timerColor === value);
+      element('span', 'pp-swatch', button).style.background = value;
+      button.addEventListener('click', () => this.actions.change({ timerColor: value }));
+    }
+    const effects = element('div', 'pp-chips', this.section('Bei null'));
+    for (const { effect, label } of TIMER_EFFECTS) {
+      this.chip(effects, label, p.timerEffect === effect, () => this.actions.change({ timerEffect: effect }));
+    }
+    const sounds = element('div', 'pp-chips', this.section('Ton'));
+    for (const { sound, label } of TIMER_SOUNDS) {
+      this.chip(sounds, label, p.timerSound === sound, () => {
+        this.actions.change({ timerSound: sound });
+        if (sound !== 'off') this.actions.timerPreviewEnd();
+      });
+    }
+    const preview = element('div', 'pp-timer-controls', this.panel);
+    this.textButton(preview, 'Ende vorführen', () => this.actions.timerPreviewEnd());
     const controls = element('div', 'pp-timer-controls', this.panel);
     const running = state.timerStatus === 'running';
     const label = running ? 'Anhalten' : state.timerStatus === 'paused' ? 'Fortsetzen' : 'Starten';
@@ -388,7 +451,7 @@ export class Toolbar {
     }).classList.add('is-primary');
     if (state.timerStatus !== 'idle') this.textButton(controls, 'Zurücksetzen', () => this.actions.timerReset());
     const hint = element('div', 'pp-hint', this.panel);
-    hint.textContent = 'Die Anzeige lässt sich mit dem Finger verschieben. Ein Tipp darauf hält sie an.';
+    hint.textContent = 'Die Anzeige lässt sich mit dem Finger verschieben. Ein Tipp darauf hält sie an. Der Ton kommt über AirPlay aus dem Board.';
   }
 
   private buildPointerPanel(p: Preferences): void {
@@ -441,6 +504,10 @@ export class Toolbar {
     }
 
     const lesson = element('div', 'pp-timer-controls', this.section('In der Stunde'));
+    this.textButton(lesson, 'Leere Seite einfügen', () => {
+      this.collapse();
+      this.actions.insertBlank();
+    });
     if (more.hasPlan) this.textButton(lesson, more.planRunning ? 'Planzeit aus' : 'Planzeit starten', () => this.actions.togglePlan());
     this.textButton(lesson, 'Tafel neu entstehen lassen', () => {
       this.collapse();
@@ -497,6 +564,20 @@ export class Toolbar {
       chip.prepend(canvas);
       samples.push({ canvas, type });
     }
+    const slots = element('div', 'pp-chips pp-slot-chips', this.section('Stiftablage'));
+    const slotSamples: { canvas: HTMLCanvasElement; slot: PenSlot }[] = [];
+    p.penSlots.forEach((slot, index) => {
+      const chip = this.chip(slots, `Fach ${index + 1}`, slotMatches(slot, p), () => this.actions.selectPenSlot(index));
+      chip.classList.add('pp-chip-slot');
+      chip.classList.toggle('is-target', index === p.penSlot);
+      const canvas = document.createElement('canvas');
+      canvas.className = 'pp-chip-sample';
+      chip.prepend(canvas);
+      slotSamples.push({ canvas, slot });
+    });
+    const store = element('div', 'pp-timer-controls', this.panel.lastElementChild as HTMLElement);
+    this.textButton(store, `Aktuellen Stift in Fach ${p.penSlot + 1} ablegen`, () => this.actions.storePenSlot());
+    this.holdSection(p);
     const smoothing = element('div', 'pp-chips', this.section('Glättung'));
     for (const { level, label } of SMOOTHING_LEVELS) {
       this.chip(smoothing, label, p.penSmoothing === level, () => this.actions.change({ penSmoothing: level }));
@@ -508,6 +589,11 @@ export class Toolbar {
       refresh?.();
       const state = this.state;
       if (!state) return;
+      for (const { canvas, slot } of slotSamples) {
+        const rect = canvas.getBoundingClientRect();
+        const stroke: Stroke = { kind: 'pen', color: slot.color, penType: slot.penType, smoothing: slot.smoothing, width: slot.width, points: [] };
+        paintSample(canvas, sampleStroke(stroke, state.sheetWidth, rect.width, PEN_SAMPLE_HEIGHT), state.sheetWidth);
+      }
       for (const { canvas, type } of samples) {
         const rect = canvas.getBoundingClientRect();
         const stroke: Stroke = {
@@ -527,6 +613,7 @@ export class Toolbar {
     const modes = element('div', 'pp-chips', this.section('Spitze'));
     this.chip(modes, 'Freihand', !p.markerStraight, () => this.actions.change({ markerStraight: false }));
     this.chip(modes, 'Gerade', p.markerStraight, () => this.actions.change({ markerStraight: true }));
+    if (!p.markerStraight) this.holdSection(p);
     this.widthSection('marker', 'markerWidth', p);
     this.colorSection(MARKER_PALETTE, p.customMarker, p.markerColor);
   }
@@ -542,6 +629,24 @@ export class Toolbar {
     }
     this.widthSection('pen', 'penWidth', p);
     this.colorSection(PEN_PALETTE, p.customPen, p.penColor);
+  }
+
+  private holdSection(p: Preferences): void {
+    const hold = element('div', 'pp-chips', this.section('Zeichnen und halten'));
+    this.chip(hold, 'An', p.holdToShape, () => this.actions.change({ holdToShape: true }));
+    this.chip(hold, 'Aus', !p.holdToShape, () => this.actions.change({ holdToShape: false }));
+    element('div', 'pp-hint', hold.parentElement as HTMLElement).textContent =
+      'Stift am Ende kurz stehen lassen: Aus dem Strich wird eine gerade Linie, ein Rechteck oder eine Ellipse. Bei der Linie folgt das Ende dem Stift, bis du absetzt.';
+  }
+
+  private buildLassoPanel(): void {
+    element('div', 'pp-hint', this.section('Lasso')).textContent =
+      'Mit dem Stift Tinte umkreisen. Die Auswahl mit dem Stift verschieben, oder unten kopieren und löschen.';
+    const has = (this.state as ToolbarState).hasSelection;
+    const controls = element('div', 'pp-timer-controls', this.panel);
+    this.textButton(controls, 'Kopieren', () => this.actions.lassoDuplicate()).disabled = !has;
+    this.textButton(controls, 'Löschen', () => this.actions.lassoDelete()).disabled = !has;
+    this.textButton(controls, 'Aufheben', () => this.actions.lassoClear()).disabled = !has;
   }
 
   private buildEraserPanel(p: Preferences): void {

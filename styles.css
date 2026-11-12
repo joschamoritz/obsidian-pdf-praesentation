@@ -472,8 +472,9 @@
   padding: 0.12em 0.42em !important;
   transform: translate(-50%, -50%);
   border-radius: 0.3em;
-  background: rgba(20, 20, 22, 0.88);
-  color: #fff;
+  background: var(--pp-timer-bg, #141416);
+  color: var(--pp-timer-fg, #fff);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
   font-weight: 700;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -507,16 +508,60 @@
 
 .pp-root .pp-timer[data-phase="warning"] {
   background: rgba(190, 95, 0, 0.94);
+  color: #fff;
 }
 
 .pp-root .pp-timer[data-phase="finished"] {
   background: rgba(190, 30, 30, 0.96);
+  color: #fff;
+}
+
+/* Bei null: der gewählte Effekt. is-effect zeigt ihn zur Probe im Einstellungsfeld. */
+.pp-root .pp-timer[data-phase="finished"][data-effect="blink"],
+.pp-root .pp-timer.is-effect[data-effect="blink"] {
   animation: pp-timer-end 0.7s ease-in-out 3;
+}
+
+.pp-root .pp-timer[data-phase="finished"][data-effect="pulse"],
+.pp-root .pp-timer.is-effect[data-effect="pulse"] {
+  animation: pp-timer-pulse 0.8s ease-in-out 4;
 }
 
 @keyframes pp-timer-end {
   50% {
     opacity: 0.35;
+  }
+}
+
+@keyframes pp-timer-pulse {
+  50% {
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+}
+
+/* Aufleuchten: die ganze Fläche blitzt dreimal kurz auf, gut zu sehen auch aus der letzten Reihe */
+.pp-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pp-flash.is-flashing {
+  animation: pp-flash 0.6s ease-in-out 3;
+}
+
+@keyframes pp-flash {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-root .pp-timer[data-phase="finished"][data-effect="pulse"],
+  .pp-root .pp-timer.is-effect[data-effect="pulse"] {
+    animation: pp-timer-end 0.7s ease-in-out 3;
   }
 }
 
@@ -710,4 +755,49 @@ button.pp-link-button:hover {
 .pp-link-button svg {
   width: 1em;
   height: 1em;
+}
+
+/* Stiftablage: Fächer im Einstellungsfeld auf hellem Grund, damit jede Farbe so erscheint wie auf der Folie */
+.pp-root .pp-chip.pp-chip-slot {
+  background: #e9e9eb;
+  color: #1c1c1e;
+  box-shadow: inset 0 0 0 2px transparent;
+}
+
+.pp-root .pp-chip.pp-chip-slot.is-active {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 3px #0a84ff;
+}
+
+.pp-root .pp-chip.pp-chip-slot.is-target .pp-chip-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pp-root .pp-chip-slot .pp-chip-sample {
+  filter: none !important;
+}
+
+.pp-slot-chips {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pp-root .pp-slot .pp-swatch {
+  margin: auto;
+}
+
+/* Kleine Leiste über der Lasso-Auswahl */
+.pp-selection-bar {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(28, 28, 30, 0.94);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.pp-selection-bar.is-visible {
+  display: flex;
 }

@@ -28,4 +28,4 @@ export interface PdfDocument {
   destroy(): unknown;
 }
 
-export type Tool = 'laser' | 'pen' | 'marker' | 'eraser' | 'shape' | 'cover';
+export type Tool = 'laser' | 'pen' | 'marker' | 'eraser' | 'shape' | 'cover' | 'lasso';

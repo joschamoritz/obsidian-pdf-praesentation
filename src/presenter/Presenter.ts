@@ -7,8 +7,12 @@ import {
   type ShapeType,
   type Stroke,
 } from './ink';
+import { icons } from './icons';
+import { insideBounds, moveStrokes, replaceStrokes, selectInLasso, selectionBounds } from './lasso';
 import { Laser } from './laser';
 import { SampleFilter } from './samples';
+import { recognizeShape } from './shapeRecognition';
+import { SoundPlayer } from './sound';
 import { Overview } from './overview';
 import { PageRenderer, releaseCanvas } from './pageRenderer';
 import {
@@ -65,7 +69,13 @@ interface ShapeDrag {
   width: number;
   start: { x: number; y: number };
   end: { x: number; y: number };
+  /** Aus Zeichnen und halten: Rechteck und Ellipse bleiben, wie erkannt */
+  fixed?: boolean;
 }
+
+/** So lange muss der Stift stillstehen, und so weit darf er dabei zittern (Bildschirmpixel). */
+const HOLD_MS = 550;
+const HOLD_RADIUS_PX = 4;
 
 export interface PresenterOptions {
   doc: PdfDocument;
@@ -146,6 +156,15 @@ export class Presenter {
   private closed = false;
   private wakeLock: { release(): Promise<void> } | null = null;
   private resizeObserver: ResizeObserver;
+  private sound = new SoundPlayer();
+  private flash: HTMLElement;
+  private holdTimer = 0;
+  private holdAnchor: { x: number; y: number } | null = null;
+  private lassoPath: { x: number; y: number }[] | null = null;
+  private lassoDrag: { start: { x: number; y: number }; base: Stroke[]; all: Stroke[] } | null = null;
+  /** Mit dem Lasso ausgewählte Striche der aktuellen Seite */
+  private selection: Stroke[] | null = null;
+  private selectionBar: HTMLElement;
 
   constructor(private options: PresenterOptions) {
     this.session = options.session;
@@ -171,6 +190,26 @@ export class Presenter {
     this.inkLayer = this.layer('pp-layer');
     this.transientLayer = this.layer('pp-layer');
     this.root.appendChild(this.stage);
+    this.flash = document.createElement('div');
+    this.flash.className = 'pp-flash';
+    this.root.appendChild(this.flash);
+    this.selectionBar = document.createElement('div');
+    this.selectionBar.className = 'pp-selection-bar';
+    for (const [icon, label, action] of [
+      ['copy', 'Auswahl kopieren', () => this.lassoDuplicate()],
+      ['trash', 'Auswahl löschen', () => this.lassoDelete()],
+      ['close', 'Auswahl aufheben', () => this.clearSelection()],
+    ] as const) {
+      const button = document.createElement('button');
+      button.className = 'pp-button';
+      button.innerHTML = icons[icon];
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      button.addEventListener('pointerdown', (event) => event.stopPropagation());
+      button.addEventListener('click', action);
+      this.selectionBar.appendChild(button);
+    }
+    this.root.appendChild(this.selectionBar);
     this.spot = document.createElement('div');
     this.spot.className = 'pp-spot';
     this.stage.appendChild(this.spot);
@@ -205,9 +244,12 @@ export class Presenter {
       x: this.preferences.timerX,
       y: this.preferences.timerY,
       isInking: () => this.inkRect !== null,
+      color: this.preferences.timerColor,
+      effect: this.preferences.timerEffect,
       onStatusChange: () => {
         if (this.toolbar) this.syncToolbar();
       },
+      onFinished: () => this.timerFinished(),
       onMoved: (timerX, timerY) => this.changePreferences({ timerX, timerY }),
     });
 
@@ -233,6 +275,7 @@ export class Presenter {
         this.timerChanged();
       },
       timerStartPause: () => {
+        this.sound.unlock();
         this.timer.timer.toggle();
         this.timerChanged();
       },
@@ -241,6 +284,15 @@ export class Presenter {
         this.timerChanged();
       },
       timerPreview: (on) => this.timer.setPreview(on),
+      timerPreviewEnd: () => {
+        this.sound.unlock();
+        this.timerFinished(true);
+      },
+      selectPenSlot: (index) => this.selectPenSlot(index),
+      storePenSlot: () => this.storePenSlot(),
+      lassoDelete: () => this.lassoDelete(),
+      lassoDuplicate: () => this.lassoDuplicate(),
+      lassoClear: () => this.clearSelection(),
       coverAll: () => this.coverAll(),
       coverRemoveAll: () => this.coverRemoveAll(),
       replay: () => this.startReplay(),
@@ -282,6 +334,8 @@ export class Presenter {
 
   private bindInput(): void {
     const stage = this.stage;
+    // Das iPad gibt Ton erst nach einer Berührung frei. Jeder Tipp holt das nach.
+    for (const type of ['pointerup', 'click'] as const) this.root.addEventListener(type, () => this.sound.unlock(), true);
     stage.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       try {
@@ -450,6 +504,8 @@ export class Presenter {
         end: point,
       };
       this.scheduleLive();
+    } else if (tool === 'lasso') {
+      this.lassoStart(point);
     } else if (tool === 'marker' && this.preferences.markerStraight) {
       this.shapeDrag = {
         kind: 'marker',
@@ -468,6 +524,7 @@ export class Presenter {
           : { kind, color: this.preferences.markerColor, width: this.preferences.markerWidth, points: [] };
       appendPoint(stroke, point.x, point.y, this.pressure(event), this.view.zoom);
       this.activeStroke = stroke;
+      this.holdWatch(point);
       this.scheduleLive();
     }
   }
@@ -489,10 +546,21 @@ export class Presenter {
     } else if (this.erasing) {
       this.eraseAt(point);
     } else if (this.shapeDrag) {
-      this.shapeDrag.end = point;
-      this.scheduleLive();
+      if (!this.shapeDrag.fixed) {
+        this.shapeDrag.end = point;
+        this.scheduleLive();
+      }
+    } else if (this.lassoDrag) {
+      this.lassoMove(point);
+    } else if (this.lassoPath) {
+      const last = this.lassoPath[this.lassoPath.length - 1];
+      if (Math.hypot(point.x - last.x, point.y - last.y) > 0.002 / this.view.zoom) {
+        this.lassoPath.push(point);
+        this.scheduleLive();
+      }
     } else if (this.activeStroke) {
       if (appendPoint(this.activeStroke, point.x, point.y, this.pressure(event), this.view.zoom)) this.scheduleLive();
+      this.holdWatch(point);
     }
   }
 
@@ -532,6 +600,7 @@ export class Presenter {
           : null);
       this.clearCanvas(this.transientLayer);
       if (stroke) this.paint(this.transientLayer, (context) => drawStroke(context, stroke));
+      this.paintLasso();
     });
   }
 
@@ -544,8 +613,14 @@ export class Presenter {
   }
 
   private inkEnd(event: PointerEvent | null): void {
-    const changesInk = !this.lasering && !this.spotActive;
-    if (this.coverDraft) {
+    const changesInk = !this.lasering && !this.spotActive && !this.lassoPath;
+    this.holdStop();
+    if (this.lassoPath) {
+      this.lassoFinish();
+    } else if (this.lassoDrag) {
+      this.lassoDrag = null;
+      this.slide.ink.endChange();
+    } else if (this.coverDraft) {
       this.finishCoverDraft();
     } else if (this.lasering) {
       this.lasering = false;
@@ -574,6 +649,14 @@ export class Presenter {
   }
 
   private inkCancel(): void {
+    this.holdStop();
+    this.lassoPath = null;
+    if (this.lassoDrag) {
+      this.slide.ink.setStrokes(this.lassoDrag.all);
+      this.slide.ink.endChange();
+      this.selection = this.lassoDrag.base;
+      this.lassoDrag = null;
+    }
     this.inkRect = null;
     this.activeStroke = null;
     this.shapeDrag = null;
@@ -637,6 +720,8 @@ export class Presenter {
     this.paint(this.inkLayer, (context) => {
       for (const stroke of strokes) if (stroke.kind === 'pen') drawStroke(context, stroke);
     });
+    // Zoom und Verschieben zeichnen die Tinte neu, die Auswahl muss mit.
+    if (this.selection) this.scheduleLive();
   }
 
   /** Beim Zoomen und Verschieben höchstens einmal je Bild. */
@@ -649,6 +734,7 @@ export class Presenter {
   }
 
   private undo(): void {
+    this.clearSelection();
     if (this.slide.ink.undo()) {
       this.redrawInk();
       this.syncToolbar();
@@ -657,6 +743,7 @@ export class Presenter {
   }
 
   private redo(): void {
+    this.clearSelection();
     if (this.slide.ink.redo()) {
       this.redrawInk();
       this.syncToolbar();
@@ -665,6 +752,7 @@ export class Presenter {
   }
 
   private clearPage(): void {
+    this.clearSelection();
     this.slide.ink.clear();
     this.redrawInk();
     this.syncToolbar();
@@ -677,7 +765,181 @@ export class Presenter {
     void this.goTo(this.session.current);
   }
 
+  // ---------- Zeichnen und halten ----------
+
+  /** Bei jeder spürbaren Bewegung beginnt die Wartezeit neu. Steht der Stift, wird aus dem Strich eine Form. */
+  private holdWatch(point: { x: number; y: number }): void {
+    if (!this.preferences.holdToShape) return;
+    const radius = HOLD_RADIUS_PX / (this.sheetSize.width * this.view.zoom);
+    if (this.holdAnchor && Math.hypot(point.x - this.holdAnchor.x, point.y - this.holdAnchor.y) <= radius) return;
+    this.holdAnchor = point;
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(() => this.holdFired(), HOLD_MS);
+  }
+
+  private holdStop(): void {
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = 0;
+    this.holdAnchor = null;
+  }
+
+  private holdFired(): void {
+    this.holdTimer = 0;
+    const stroke = this.activeStroke;
+    if (!stroke || stroke.points.length < 2) return;
+    const shape = recognizeShape(stroke.points);
+    if (!shape) return;
+    this.activeStroke = null;
+    this.shapeDrag = {
+      kind: stroke.kind,
+      type: shape.type,
+      color: stroke.color,
+      width: stroke.width,
+      start: shape.start,
+      end: shape.end,
+      fixed: shape.type !== 'line',
+    };
+    this.scheduleLive();
+  }
+
+  // ---------- Lasso ----------
+
+  private lassoStart(point: { x: number; y: number }): void {
+    const bounds = this.selection ? selectionBounds(this.selection) : null;
+    const padding = 12 / (this.sheetSize.width * this.view.zoom);
+    if (this.selection && bounds && insideBounds(point, bounds, padding)) {
+      this.slide.ink.beginChange();
+      this.lassoDrag = { start: point, base: this.selection, all: this.slide.ink.strokes };
+      return;
+    }
+    this.selection = null;
+    this.lassoPath = [point];
+    this.scheduleLive();
+  }
+
+  private lassoMove(point: { x: number; y: number }): void {
+    const drag = this.lassoDrag;
+    if (!drag) return;
+    const moved = moveStrokes(drag.base, point.x - drag.start.x, point.y - drag.start.y);
+    this.slide.ink.setStrokes(replaceStrokes(drag.all, drag.base, moved));
+    this.selection = moved;
+    this.scheduleInkRedraw();
+  }
+
+  private lassoFinish(): void {
+    const path = this.lassoPath ?? [];
+    this.lassoPath = null;
+    const selected = selectInLasso(this.slide.ink.strokes, path);
+    this.selection = selected.length ? selected : null;
+    this.scheduleLive();
+  }
+
+  private clearSelection(): void {
+    if (!this.selection && !this.lassoPath) return;
+    this.selection = null;
+    this.lassoPath = null;
+    this.selectionBar.classList.remove('is-visible');
+    this.scheduleLive();
+    if (this.toolbar) this.syncToolbar();
+  }
+
+  private lassoDelete(): void {
+    const selection = this.selection;
+    if (!selection) return;
+    const remove = new Set(selection);
+    this.slide.ink.replace(this.slide.ink.strokes.filter((stroke) => !remove.has(stroke)));
+    this.clearSelection();
+    this.redrawInk();
+    this.syncToolbar();
+    this.options.onChange?.();
+  }
+
+  private lassoDuplicate(): void {
+    const selection = this.selection;
+    if (!selection) return;
+    const copies = moveStrokes(selection, 0.02, 0.02);
+    this.slide.ink.replace([...this.slide.ink.strokes, ...copies]);
+    this.selection = copies;
+    this.redrawInk();
+    this.syncToolbar();
+    this.options.onChange?.();
+  }
+
+  /** Lasso-Linie und Rahmen der Auswahl, dazu die kleine Leiste über der Auswahl */
+  private paintLasso(): void {
+    const scale = this.sheetSize.width * this.view.zoom;
+    const path = this.lassoPath;
+    const bounds = this.selection ? selectionBounds(this.selection) : null;
+    if (path && path.length > 1) {
+      this.paint(this.transientLayer, (context) => {
+        context.setLineDash([6 / scale, 5 / scale]);
+        context.lineWidth = 1.5 / scale;
+        context.strokeStyle = '#1f5fd6';
+        context.beginPath();
+        path.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)));
+        context.stroke();
+      });
+    }
+    if (!bounds) {
+      this.selectionBar.classList.remove('is-visible');
+      return;
+    }
+    const padding = 8 / scale;
+    this.paint(this.transientLayer, (context) => {
+      context.fillStyle = 'rgba(31, 95, 214, 0.07)';
+      context.fillRect(bounds.minX - padding, bounds.minY - padding, bounds.maxX - bounds.minX + 2 * padding, bounds.maxY - bounds.minY + 2 * padding);
+      context.setLineDash([6 / scale, 5 / scale]);
+      context.lineWidth = 1.5 / scale;
+      context.strokeStyle = '#1f5fd6';
+      context.strokeRect(bounds.minX - padding, bounds.minY - padding, bounds.maxX - bounds.minX + 2 * padding, bounds.maxY - bounds.minY + 2 * padding);
+    });
+    if (this.lassoDrag) {
+      this.selectionBar.classList.remove('is-visible');
+      return;
+    }
+    const sheet = this.sheet.getBoundingClientRect();
+    const rootRect = this.root.getBoundingClientRect();
+    const left = sheet.left - rootRect.left + ((bounds.minX + bounds.maxX) / 2) * sheet.width;
+    const top = sheet.top - rootRect.top + bounds.minY * sheet.width - 14;
+    this.selectionBar.classList.add('is-visible');
+    const barWidth = this.selectionBar.offsetWidth || 150;
+    const barHeight = this.selectionBar.offsetHeight || 50;
+    const x = Math.max(8, Math.min(rootRect.width - barWidth - 8, left - barWidth / 2));
+    const below = sheet.top - rootRect.top + bounds.maxY * sheet.width + 14;
+    const y = top - barHeight >= 8 ? top - barHeight : Math.min(rootRect.height - barHeight - 8, below);
+    this.selectionBar.style.left = `${x}px`;
+    this.selectionBar.style.top = `${y}px`;
+  }
+
+  // ---------- Timer am Ende ----------
+
+  /** Ton und Effekt. Mit probe auch ohne abgelaufenen Timer, zum Ausprobieren im Einstellungsfeld. */
+  private timerFinished(probe = false): void {
+    const { timerSound, timerEffect } = this.preferences;
+    this.sound.play(timerSound);
+    if (timerEffect === 'flash') {
+      this.flash.style.background = probe ? this.preferences.timerColor : '#be1e1e';
+      this.flash.classList.remove('is-flashing');
+      void this.flash.offsetWidth;
+      this.flash.classList.add('is-flashing');
+    } else if (probe && timerEffect !== 'none') {
+      this.timer.playEffect();
+    }
+  }
+
   // ---------- Werkzeuge ----------
+
+  private selectPenSlot(index: number): void {
+    const slot = this.preferences.penSlots[index];
+    if (!slot) return;
+    this.changePreferences({ penColor: slot.color, penType: slot.penType, penWidth: slot.width, penSmoothing: slot.smoothing, penSlot: index });
+  }
+
+  private storePenSlot(): void {
+    const { penColor, penType, penWidth, penSmoothing, penSlot, penSlots } = this.preferences;
+    const next = penSlots.map((slot, index) => (index === penSlot ? { color: penColor, penType, width: penWidth, smoothing: penSmoothing } : slot));
+    this.changePreferences({ penSlots: next });
+  }
 
   private selectTool(tool: Tool): void {
     this.changePreferences({ tool });
@@ -707,6 +969,9 @@ export class Presenter {
     savePreferences(this.preferences);
     if (patch.timerSize) this.timer.setSize(patch.timerSize);
     if (patch.edgeMode) this.applyEdge();
+    if (patch.timerColor) this.timer.setColor(patch.timerColor);
+    if (patch.timerEffect) this.timer.setEffect(patch.timerEffect);
+    if (patch.tool && patch.tool !== 'lasso') this.clearSelection();
     if ('tool' in patch || 'pointerMode' in patch || 'spotSize' in patch) this.renderSpot();
     this.syncToolbar();
     if ('toolbarPinned' in patch) this.onResize();
@@ -760,6 +1025,7 @@ export class Presenter {
       sheetWidth: this.sheetSize.width,
       timerStatus: this.timer.timer.status,
       timerMinutes: this.timer.timer.minutes,
+      hasSelection: this.selection !== null,
       more: {
         group: '',
         groups: [],
@@ -786,6 +1052,7 @@ export class Presenter {
     // Ein Presenter-Klick mitten im Strich: Der Strich gehört noch auf die alte Seite.
     if (this.inkRect) this.inkEnd(null);
     this.stopReplay();
+    this.clearSelection();
     this.clearDetail();
     this.lineToken++;
     this.lineMessage = '';
@@ -1310,6 +1577,8 @@ export class Presenter {
     this.closeOverview();
     this.laser.stop();
     for (const canvas of [this.markerLayer, this.inkLayer, this.transientLayer]) releaseCanvas(canvas);
+    this.holdStop();
+    this.sound.destroy();
     this.toolbar.destroy();
     this.timer.destroy();
     this.resizeObserver.disconnect();

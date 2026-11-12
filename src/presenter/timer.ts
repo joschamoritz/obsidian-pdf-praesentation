@@ -96,6 +96,17 @@ export class CountdownTimer {
   }
 }
 
+/** Schwarz oder Weiß, je nachdem, was auf der Hintergrundfarbe lesbarer ist */
+export function readableOn(color: string): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return '#fff';
+  const [r, g, b] = match.slice(1).map((part) => {
+    const value = parseInt(part, 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#111' : '#fff';
+}
+
 function clampDuration(ms: number): number {
   return Math.min(MAX_DURATION, Math.max(MIN_DURATION, ms));
 }
@@ -123,7 +134,11 @@ export interface TimerWidgetOptions {
   y: number;
   /** Während eines Strichs reagiert die Anzeige nicht, sonst schöbe die aufliegende Hand sie weg. */
   isInking(): boolean;
+  color?: string;
+  effect?: string;
   onStatusChange(): void;
+  /** Genau einmal, wenn ein laufender Timer bei null ankommt */
+  onFinished?(): void;
   onMoved(x: number, y: number): void;
 }
 
@@ -153,6 +168,8 @@ export class TimerWidget {
     this.element.addEventListener('pointerup', (event) => this.onPointerUp(event));
     this.element.addEventListener('pointercancel', () => (this.drag = null));
     root.appendChild(this.element);
+    this.setColor(options.color ?? '#141416');
+    this.setEffect(options.effect ?? 'blink');
     this.setSize(options.size);
     this.render();
   }
@@ -160,6 +177,23 @@ export class TimerWidget {
   setSize(size: TimerSize): void {
     this.element.dataset.size = size;
     this.applyPosition();
+  }
+
+  setColor(color: string): void {
+    this.element.style.setProperty('--pp-timer-bg', color);
+    this.element.style.setProperty('--pp-timer-fg', readableOn(color));
+  }
+
+  setEffect(effect: string): void {
+    this.element.dataset.effect = effect;
+  }
+
+  /** Zeigt den Effekt zur Probe, auch wenn der Timer gerade nicht abgelaufen ist. */
+  playEffect(): void {
+    this.element.classList.remove('is-effect');
+    void this.element.offsetWidth;
+    this.element.classList.add('is-effect');
+    window.setTimeout(() => this.element.classList.remove('is-effect'), 3200);
   }
 
   /** Beim Einstellen zeigt die Anzeige schon Größe und Lage, bevor sie läuft. */
@@ -187,8 +221,10 @@ export class TimerWidget {
       this.interval = 0;
     }
     if (status !== this.lastStatus) {
+      const finished = this.lastStatus === 'running' && status === 'finished';
       this.lastStatus = status;
       this.options.onStatusChange();
+      if (finished) this.options.onFinished?.();
     }
   }
 

@@ -51,7 +51,7 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 
 **Abdecken:** Mit dem Werkzeug „Abdecken“ zieht der Stift Flächen über die Folie, ein Stifttipp entfernt sie. Sie werden gespeichert. In der Stunde zieht der Finger sie weg wie ein Blatt auf dem Overheadprojektor, oder ein Tipp deckt sie ganz auf. Beim nächsten Öffnen liegt wieder alles drauf.
 
-**Zeiger:** Laserpunkt mit leuchtender Spur oder Schlüsselloch. Die Spur bleibt, solange der Stift aufliegt, so lässt sich ein Bereich länger einkreisen; umschaltbar auf „Verblasst gleich“. Beim Schlüsselloch ist alles dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
+**Zeiger:** Laserpunkt mit leuchtender Spur oder Schlüsselloch. Die Spur bleibt, solange der Stift aufliegt, so lässt sich ein Bereich länger einkreisen; umschaltbar auf „Verblasst gleich“. Die Laserstärke ist fein, mittel oder kräftig. Beim Schlüsselloch ist alles dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
 
 **Mehr:** Das Feld mit den drei Punkten enthält:
 - **Leere Seite einfügen** hinter der aktuellen Seite.

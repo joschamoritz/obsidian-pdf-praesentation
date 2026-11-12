@@ -1,4 +1,5 @@
 import { PageInk, type PenType, type ShapeType, type Smoothing } from './ink';
+import type { LaserSize } from './laser';
 import type { TimerSound } from './sound';
 import type { StoredSlide } from './inkFile';
 import type { TimerSize } from './timer';
@@ -189,6 +190,7 @@ export interface Preferences {
   timerSound: TimerSound;
   /** Laserspur bleibt, solange der Stift aufliegt (wie GoodNotes), sonst verblasst sie gleich hinter dem Punkt */
   laserHold: boolean;
+  laserSize: LaserSize;
   /** Stift am Ende stehen lassen macht aus dem Strich eine Linie oder Form */
   holdToShape: boolean;
   penSlots: PenSlot[];
@@ -300,6 +302,7 @@ const DEFAULTS: Preferences = {
   timerSound: 'off',
   holdToShape: true,
   laserHold: true,
+  laserSize: 'medium',
   penSlots: [],
   penSlot: 0,
   edgeMode: 'page',
@@ -332,6 +335,7 @@ export function normalizePreferences(stored: unknown): Preferences {
   if (!['off', 'gong', 'bell', 'chime', 'beep'].includes(preferences.timerSound)) preferences.timerSound = DEFAULTS.timerSound;
   if (typeof preferences.holdToShape !== 'boolean') preferences.holdToShape = DEFAULTS.holdToShape;
   if (typeof preferences.laserHold !== 'boolean') preferences.laserHold = DEFAULTS.laserHold;
+  if (!['thin', 'medium', 'thick'].includes(preferences.laserSize)) preferences.laserSize = DEFAULTS.laserSize;
   preferences.penSlots = normalizePenSlots(preferences.penSlots, preferences);
   if (!Number.isInteger(preferences.penSlot) || preferences.penSlot < 0 || preferences.penSlot >= PEN_SLOTS) preferences.penSlot = 0;
   return preferences;

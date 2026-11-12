@@ -1,13 +1,15 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.0, lokal; auf GitHub liegt v0.12.1).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.1, lokal; auf GitHub liegt v0.12.1).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
-## Als Nächstes: iPad-Test von v0.13.0
+## Als Nächstes: iPad-Test von v0.13.1
+
+v0.13.0 lief am iPad fast durchweg (12.11.2026). Einziger Befund: Die Laserspur war deutlich dicker als vorher. Ursache: perfect-freehand rechnet mit size als Halbmesser-Maß, die Spur wurde so etwa doppelt so breit, mit Schein rund dreimal. v0.13.1 setzt Mittel wieder auf die alte Breite (Kern etwa 5 px auf dem iPad) und macht die Stärke wählbar: fein, mittel, kräftig.
 
 | Funktion | Worauf achten |
 |---|---|
-| **Laser** als durchgehende Spur; voreingestellt bleibt sie, solange der Stift aufliegt (wie GoodNotes), umschaltbar auf „Verblasst gleich“ | Ist die Spur bei schnellen Bewegungen jetzt eine Linie? Kommt sie schnell genug hinterher? |
+| **Laser** als durchgehende Spur; voreingestellt bleibt sie, solange der Stift aufliegt (wie GoodNotes), umschaltbar auf „Verblasst gleich“; Stärke fein, mittel, kräftig | Passt Mittel jetzt? Sonst eine andere Stärke wählen oder die Werte nachjustieren |
 | **Zeichnen und halten** erkennt jetzt auch Dreieck und Pfeil (Schaft, dann ein oder zwei Haken zurück) | Wird ein Pfeil erkannt, wie du ihn zeichnest? Werden Dreiecke zu oft zu Rechtecken oder umgekehrt? |
 | **Lasso:** Umfärben über die Palette in der kleinen Leiste, Vergrößern am weißen Punkt unten rechts | Trifft der Finger bzw. Stift den Punkt gut? |
 | **Nach der Stunde:** Nach einer Präsentation aus einem Stundenentwurf, die mindestens zehn Minuten lief, drei Felder für die Reflexion | Kommt die Abfrage zur richtigen Zeit? Stört sie? „Nicht mehr fragen“ schaltet sie je Gerät ab |
@@ -40,7 +42,8 @@ Zurzeit keine offenen. Neue Wünsche hier eintragen.
 | v0.11.0 | Glättung der Schrift (Aus · Leicht · Stark) | geprüft 12.11.2026 |
 | v0.12.0 | Timer mit Farbe, Effekt und Ton · Lasso · Zeichnen und halten · Stiftablage · „Leere Seite einfügen“ im Mehr-Feld | geprüft 12.11.2026 |
 | v0.12.1 | Timer: Pink, Orange, eigene Farbe | geprüft 12.11.2026 |
-| v0.13.0 | Laser als Spur mit Halten · Dreieck und Pfeil · Lasso umfärben und vergrößern · Nach der Stunde | offen |
+| v0.13.0 | Laser als Spur mit Halten · Dreieck und Pfeil · Lasso umfärben und vergrößern · Nach der Stunde | geprüft 12.11.2026, Laser zu dick |
+| v0.13.1 | Laserbreite wie früher, Stärke wählbar | offen |
 
 Außerdem: Die Testseite benennt eingebaute Android-Browser richtig (12.11.2026). Das lebendige Wochen-Dashboard ist ein eigenes Plugin aus einer eigenen Sitzung.
 

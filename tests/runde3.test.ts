@@ -85,6 +85,12 @@ describe('Laserspur', () => {
     expect(Math.min(...trail.map((entry) => entry[2]))).toBeGreaterThan(0.3);
   });
 
+  it('Stärke Mittel ist voreingestellt, Unbrauchbares fällt darauf zurück', () => {
+    expect(normalizePreferences({}).laserSize).toBe('medium');
+    expect(normalizePreferences({ laserSize: 'riesig' }).laserSize).toBe('medium');
+    expect(normalizePreferences({ laserSize: 'thin' }).laserSize).toBe('thin');
+  });
+
   it('Halten ist voreingestellt', () => {
     expect(normalizePreferences({}).laserHold).toBe(true);
     expect(normalizePreferences({ laserHold: 'ja' }).laserHold).toBe(true);

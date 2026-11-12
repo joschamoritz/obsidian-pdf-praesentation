@@ -248,7 +248,7 @@ export class Presenter {
     this.root.appendChild(this.planElement);
     document.body.appendChild(this.root);
 
-    this.laser = new Laser(this.transientLayer, (context) => this.applyPageTransform(context), { hold: () => this.preferences.laserHold });
+    this.laser = new Laser(this.transientLayer, (context) => this.applyPageTransform(context), { hold: () => this.preferences.laserHold, size: () => this.preferences.laserSize });
     this.router = new GestureRouter<InkPointerEvent>({
       inkStart: (event) => this.inkStart(event),
       inkMove: (event) => this.inkMove(event),

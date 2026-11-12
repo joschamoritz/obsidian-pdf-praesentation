@@ -17,13 +17,22 @@ const FADE_MS = 600;
 /** Mit Halten: Grenze, damit eine sehr lange Markierung das iPad nicht ausbremst */
 const MAX_POINTS = 6000;
 const COLOR = '255, 40, 40';
-const WIDTH = 0.006;
+export type LaserSize = 'thin' | 'medium' | 'thick';
+/**
+ * Breite des leuchtenden Kerns in Seitenbreiten. Mittel entspricht der Spur vor v0.13.
+ * perfect-freehand nimmt size als Halbmesser-Maß: Bei voller Stärke und thinning 0,7 wird der
+ * Strich 1,7 × size breit. Deshalb wird unten durch 1,7 geteilt.
+ */
+const CORE: Record<LaserSize, number> = { thin: 0.003, medium: 0.0045, thick: 0.0065 };
+const GLOW_FACTOR = 2.4;
+const FULL_WIDTH = 1.7;
 /** perfect-freehand rechnet in festen Einheiten, die Seite ist bei uns 1 breit */
 const SCALE = 4000;
 
 export interface LaserOptions {
   /** Die Spur bleibt, solange der Stift aufliegt, wie bei GoodNotes */
   hold(): boolean;
+  size?(): LaserSize;
 }
 
 export class Laser {
@@ -91,22 +100,25 @@ export class Laser {
       else if (fade <= 0) this.points = [];
     }
 
+    const core = CORE[this.options.size?.() ?? 'medium'] ?? CORE.medium;
     if (this.points.length > 1 && fade > 0) {
       const trail = laserTrail(this.points, now, holding);
-      context.fillStyle = `rgba(${COLOR}, ${0.2 * fade})`;
-      context.fill(outlinePath(trail, WIDTH * 2.6));
+      context.fillStyle = `rgba(${COLOR}, ${0.18 * fade})`;
+      context.fill(outlinePath(trail, (core * GLOW_FACTOR) / FULL_WIDTH));
       context.fillStyle = `rgba(${COLOR}, ${0.75 * fade})`;
-      context.fill(outlinePath(trail, WIDTH));
+      context.fill(outlinePath(trail, core / FULL_WIDTH));
     }
 
     if (this.latest && fade > 0) {
+      // Der Punkt bleibt etwas größer als die Spur, damit man den Kopf findet
+      const head = core * 1.4;
       context.fillStyle = `rgba(${COLOR}, ${0.28 * fade})`;
       context.beginPath();
-      context.arc(this.latest.x, this.latest.y, 0.014, 0, Math.PI * 2);
+      context.arc(this.latest.x, this.latest.y, head * 2.2, 0, Math.PI * 2);
       context.fill();
       context.fillStyle = `rgba(${COLOR}, ${fade})`;
       context.beginPath();
-      context.arc(this.latest.x, this.latest.y, 0.0065, 0, Math.PI * 2);
+      context.arc(this.latest.x, this.latest.y, head, 0, Math.PI * 2);
       context.fill();
     }
 

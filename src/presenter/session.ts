@@ -187,6 +187,8 @@ export interface Preferences {
   timerColor: string;
   timerEffect: TimerEffect;
   timerSound: TimerSound;
+  /** Laserspur bleibt, solange der Stift aufliegt (wie GoodNotes), sonst verblasst sie gleich hinter dem Punkt */
+  laserHold: boolean;
   /** Stift am Ende stehen lassen macht aus dem Strich eine Linie oder Form */
   holdToShape: boolean;
   penSlots: PenSlot[];
@@ -297,6 +299,7 @@ const DEFAULTS: Preferences = {
   timerEffect: 'blink',
   timerSound: 'off',
   holdToShape: true,
+  laserHold: true,
   penSlots: [],
   penSlot: 0,
   edgeMode: 'page',
@@ -328,6 +331,7 @@ export function normalizePreferences(stored: unknown): Preferences {
   if (!['blink', 'pulse', 'flash', 'none'].includes(preferences.timerEffect)) preferences.timerEffect = DEFAULTS.timerEffect;
   if (!['off', 'gong', 'bell', 'chime', 'beep'].includes(preferences.timerSound)) preferences.timerSound = DEFAULTS.timerSound;
   if (typeof preferences.holdToShape !== 'boolean') preferences.holdToShape = DEFAULTS.holdToShape;
+  if (typeof preferences.laserHold !== 'boolean') preferences.laserHold = DEFAULTS.laserHold;
   preferences.penSlots = normalizePenSlots(preferences.penSlots, preferences);
   if (!Number.isInteger(preferences.penSlot) || preferences.penSlot < 0 || preferences.penSlot >= PEN_SLOTS) preferences.penSlot = 0;
   return preferences;

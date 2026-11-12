@@ -12,7 +12,8 @@ import {
   type MarkdownPostProcessorContext,
 } from 'obsidian';
 import { exportWithInk } from './exportPdf';
-import { digitalPdfNames, formatDwell, groupSlug, parsePlan, type PlanRow } from './presenter/lessonData';
+import { digitalPdfNames, formatDwell, groupSlug, insertReflection, parsePlan, type PlanRow } from './presenter/lessonData';
+import { reflectionWanted, ReflectionModal } from './reflectionModal';
 import { findPdfs, looksLikePdfPath } from './pdfLookup';
 import { hashBytes } from './presenter/inkFile';
 import { InkSaver, InkStore } from './presenter/inkStore';
@@ -70,6 +71,8 @@ class PdfSuggestModal extends FuzzySuggestModal<TFile> {
   }
 }
 
+const REFLECTION_AFTER_MS = 10 * 60_000;
+
 export default class PdfPraesentationPlugin extends Plugin {
   private store!: InkStore;
   private unsaved = new Map<string, UnsavedSession>();
@@ -81,6 +84,8 @@ export default class PdfPraesentationPlugin extends Plugin {
   private dwellLabel: string | null = null;
   private dwellSince = 0;
   private lastDwell = '';
+  /** Wie lange die letzte Präsentation insgesamt lief */
+  private lastDwellMs = 0;
   /** Das Speichern der gerade geschlossenen Präsentation */
   private closing: Promise<void> = Promise.resolve();
   private viewsWithAction = new WeakSet<FileView>();
@@ -253,6 +258,24 @@ export default class PdfPraesentationPlugin extends Plugin {
   private finishDwell(): void {
     this.markDwell(null);
     this.lastDwell = formatDwell([...this.dwell].map(([key, ms]) => ({ label: key, ms })));
+    this.lastDwellMs = [...this.dwell.values()].reduce((sum, ms) => sum + ms, 0);
+  }
+
+  /**
+   * Nach einer Präsentation aus einem Stundenentwurf, die mindestens zehn Minuten lief: drei Felder
+   * für die Reflexion. Kurzes Zeigen oder Probieren am Schreibtisch fragt nicht.
+   */
+  private askReflection(): void {
+    const lesson = this.lesson;
+    if (!lesson || this.lastDwellMs < REFLECTION_AFTER_MS || !reflectionWanted()) return;
+    const note = this.app.vault.getAbstractFileByPath(lesson.notePath);
+    if (!(note instanceof TFile)) return;
+    new ReflectionModal(this.app, note.basename, this.lastDwell, (entries, withDwell) => {
+      void this.app.vault
+        .process(note, (text) => insertReflection(text, entries, withDwell ? this.lastDwell : ''))
+        .then(() => new Notice(`Reflexion steht in „${note.basename}“.`))
+        .catch(() => new Notice('Die Reflexion ließ sich nicht speichern. Bitte von Hand eintragen.', NOTICE_MS));
+    }).open();
   }
 
   private async exportPdf(file: TFile, session: PresentationSession): Promise<void> {
@@ -377,6 +400,7 @@ export default class PdfPraesentationPlugin extends Plugin {
           if (this.presenter === presenter) {
             this.presenter = null;
             this.finishDwell();
+            this.askReflection();
           }
           void openedDoc.destroy();
           const saved = saver.flush().then(() => {

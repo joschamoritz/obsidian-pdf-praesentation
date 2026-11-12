@@ -383,7 +383,7 @@ export class Toolbar {
     const p = this.state.preferences;
     const key = JSON.stringify([
       this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode, p.pointerMode, this.state.more,
-      p.timerColor, p.timerEffect, p.timerSound, p.holdToShape, p.penSlots, p.penSlot, this.state.hasSelection,
+      p.laserHold, p.timerColor, p.timerEffect, p.timerSound, p.holdToShape, p.penSlots, p.penSlot, this.state.hasSelection,
       p.tool, p.penType, p.penSmoothing, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
       p.customPen, p.customMarker, this.state.sheetWidth,
     ]);
@@ -476,7 +476,14 @@ export class Toolbar {
     const modes = element('div', 'pp-chips', this.section('Zeiger'));
     this.chip(modes, 'Laserpointer', p.pointerMode === 'laser', () => this.actions.change({ pointerMode: 'laser' }));
     this.chip(modes, 'Schlüsselloch', p.pointerMode === 'spot', () => this.actions.change({ pointerMode: 'spot' }));
-    if (p.pointerMode !== 'spot') return;
+    if (p.pointerMode !== 'spot') {
+      const trail = element('div', 'pp-chips', this.section('Laserspur'));
+      this.chip(trail, 'Bleibt, solange der Stift aufliegt', p.laserHold, () => this.actions.change({ laserHold: true }));
+      this.chip(trail, 'Verblasst gleich', !p.laserHold, () => this.actions.change({ laserHold: false }));
+      element('div', 'pp-hint', trail.parentElement as HTMLElement).textContent =
+        'Bleibt der Stift liegen, bleibt auch die Spur, so lässt sich ein Bereich länger einkreisen. Nach dem Absetzen verblasst sie.';
+      return;
+    }
     const section = this.section('Größe des Sichtfensters');
     const slider = element('input', 'pp-slider', section);
     slider.type = 'range';

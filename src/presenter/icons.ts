@@ -13,6 +13,7 @@ import highlighter from 'lucide-static/icons/highlighter.svg';
 import lasso from 'lucide-static/icons/lasso.svg';
 import layoutGrid from 'lucide-static/icons/layout-grid.svg';
 import monitor from 'lucide-static/icons/monitor.svg';
+import palette from 'lucide-static/icons/palette.svg';
 import lock from 'lucide-static/icons/lock.svg';
 import lockOpen from 'lucide-static/icons/lock-open.svg';
 import moveUpRight from 'lucide-static/icons/move-up-right.svg';
@@ -50,6 +51,7 @@ export const icons = {
   lock,
   lockOpen,
   monitor,
+  palette,
   pen,
   pin,
   pinOff,

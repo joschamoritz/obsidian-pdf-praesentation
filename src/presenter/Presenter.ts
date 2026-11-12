@@ -8,7 +8,7 @@ import {
   type Stroke,
 } from './ink';
 import { icons } from './icons';
-import { insideBounds, moveStrokes, replaceStrokes, selectInLasso, selectionBounds } from './lasso';
+import { insideBounds, moveStrokes, recolorStrokes, replaceStrokes, scaleStrokes, selectInLasso, selectionBounds } from './lasso';
 import { Laser } from './laser';
 import { SampleFilter } from './samples';
 import { recognizeShape } from './shapeRecognition';
@@ -71,7 +71,15 @@ interface ShapeDrag {
   end: { x: number; y: number };
   /** Aus Zeichnen und halten: Rechteck und Ellipse bleiben, wie erkannt */
   fixed?: boolean;
+  /** Eine erkannte Form mit eigenen Ecken, etwa ein Dreieck */
+  points?: { x: number; y: number }[];
 }
+
+/** Farben zum Umfärben einer Lasso-Auswahl */
+const LASSO_COLORS = ['#111111', '#d92626', '#1f5fd6', '#1a8f3c', '#f28c28', '#8b3fd9', '#ffffff'];
+/** Greifpunkt zum Vergrößern unten rechts an der Auswahl, in Bildschirmpixeln */
+const HANDLE_PX = 9;
+const HANDLE_REACH_PX = 26;
 
 /** So lange muss der Stift stillstehen, und so weit darf er dabei zittern (Bildschirmpixel). */
 const HOLD_MS = 550;
@@ -161,7 +169,14 @@ export class Presenter {
   private holdTimer = 0;
   private holdAnchor: { x: number; y: number } | null = null;
   private lassoPath: { x: number; y: number }[] | null = null;
-  private lassoDrag: { start: { x: number; y: number }; base: Stroke[]; all: Stroke[] } | null = null;
+  private lassoDrag: {
+    start: { x: number; y: number };
+    base: Stroke[];
+    all: Stroke[];
+    /** Beim Vergrößern: fester Punkt oben links und die Ecke, an der gezogen wird */
+    scale?: { originX: number; originY: number; cornerX: number; cornerY: number };
+  } | null = null;
+  private selectionColors: HTMLElement;
   /** Mit dem Lasso ausgewählte Striche der aktuellen Seite */
   private selection: Stroke[] | null = null;
   private selectionBar: HTMLElement;
@@ -196,6 +211,7 @@ export class Presenter {
     this.selectionBar = document.createElement('div');
     this.selectionBar.className = 'pp-selection-bar';
     for (const [icon, label, action] of [
+      ['palette', 'Auswahl umfärben', () => this.selectionColors.classList.toggle('is-visible')],
       ['copy', 'Auswahl kopieren', () => this.lassoDuplicate()],
       ['trash', 'Auswahl löschen', () => this.lassoDelete()],
       ['close', 'Auswahl aufheben', () => this.clearSelection()],
@@ -209,6 +225,20 @@ export class Presenter {
       button.addEventListener('click', action);
       this.selectionBar.appendChild(button);
     }
+    this.selectionColors = document.createElement('div');
+    this.selectionColors.className = 'pp-selection-colors';
+    for (const color of LASSO_COLORS) {
+      const button = document.createElement('button');
+      button.className = 'pp-button pp-color';
+      button.setAttribute('aria-label', `Auswahl in ${color} färben`);
+      const swatch = document.createElement('span');
+      swatch.className = 'pp-swatch';
+      swatch.style.background = color;
+      button.appendChild(swatch);
+      button.addEventListener('click', () => this.lassoRecolor(color));
+      this.selectionColors.appendChild(button);
+    }
+    this.selectionBar.appendChild(this.selectionColors);
     this.root.appendChild(this.selectionBar);
     this.spot = document.createElement('div');
     this.spot.className = 'pp-spot';
@@ -218,7 +248,7 @@ export class Presenter {
     this.root.appendChild(this.planElement);
     document.body.appendChild(this.root);
 
-    this.laser = new Laser(this.transientLayer, (context) => this.applyPageTransform(context));
+    this.laser = new Laser(this.transientLayer, (context) => this.applyPageTransform(context), { hold: () => this.preferences.laserHold });
     this.router = new GestureRouter<InkPointerEvent>({
       inkStart: (event) => this.inkStart(event),
       inkMove: (event) => this.inkMove(event),
@@ -576,7 +606,9 @@ export class Presenter {
       color: drag.color,
       width: drag.width,
       sharp: true,
-      points: shapePoints(drag.type, drag.start, drag.end, drag.width),
+      points: drag.points
+        ? drag.points.map((point) => ({ x: point.x, y: point.y, p: 0.5, w: drag.width }))
+        : shapePoints(drag.type, drag.start, drag.end, drag.width),
     };
   }
 
@@ -792,12 +824,14 @@ export class Presenter {
     this.activeStroke = null;
     this.shapeDrag = {
       kind: stroke.kind,
-      type: shape.type,
+      type: shape.type === 'triangle' ? 'line' : shape.type,
       color: stroke.color,
       width: stroke.width,
       start: shape.start,
       end: shape.end,
-      fixed: shape.type !== 'line',
+      // Linie und Pfeil: Das Ende folgt dem Stift, bis er abgesetzt wird
+      fixed: shape.type !== 'line' && shape.type !== 'arrow',
+      points: shape.type === 'triangle' ? shape.points : undefined,
     };
     this.scheduleLive();
   }
@@ -806,8 +840,24 @@ export class Presenter {
 
   private lassoStart(point: { x: number; y: number }): void {
     const bounds = this.selection ? selectionBounds(this.selection) : null;
-    const padding = 12 / (this.sheetSize.width * this.view.zoom);
+    const scale = this.sheetSize.width * this.view.zoom;
+    const padding = 12 / scale;
+    if (this.selection && bounds) {
+      const corner = { x: bounds.maxX + 8 / scale, y: bounds.maxY + 8 / scale };
+      if (Math.hypot(point.x - corner.x, point.y - corner.y) <= HANDLE_REACH_PX / scale) {
+        this.slide.ink.beginChange();
+        this.selectionColors.classList.remove('is-visible');
+        this.lassoDrag = {
+          start: point,
+          base: this.selection,
+          all: this.slide.ink.strokes,
+          scale: { originX: bounds.minX, originY: bounds.minY, cornerX: corner.x, cornerY: corner.y },
+        };
+        return;
+      }
+    }
     if (this.selection && bounds && insideBounds(point, bounds, padding)) {
+      this.selectionColors.classList.remove('is-visible');
       this.slide.ink.beginChange();
       this.lassoDrag = { start: point, base: this.selection, all: this.slide.ink.strokes };
       return;
@@ -820,7 +870,16 @@ export class Presenter {
   private lassoMove(point: { x: number; y: number }): void {
     const drag = this.lassoDrag;
     if (!drag) return;
-    const moved = moveStrokes(drag.base, point.x - drag.start.x, point.y - drag.start.y);
+    let moved: Stroke[];
+    if (drag.scale) {
+      // Gleichmäßig, damit Schrift nicht verzerrt: Maß ist der Abstand zur festen Ecke oben links
+      const { originX, originY, cornerX, cornerY } = drag.scale;
+      const before = Math.hypot(cornerX - originX, cornerY - originY);
+      const now = Math.hypot(point.x - originX, point.y - originY);
+      moved = scaleStrokes(drag.base, originX, originY, Math.max(0.2, Math.min(5, now / Math.max(before, 1e-6))));
+    } else {
+      moved = moveStrokes(drag.base, point.x - drag.start.x, point.y - drag.start.y);
+    }
     this.slide.ink.setStrokes(replaceStrokes(drag.all, drag.base, moved));
     this.selection = moved;
     this.scheduleInkRedraw();
@@ -839,6 +898,7 @@ export class Presenter {
     this.selection = null;
     this.lassoPath = null;
     this.selectionBar.classList.remove('is-visible');
+    this.selectionColors.classList.remove('is-visible');
     this.scheduleLive();
     if (this.toolbar) this.syncToolbar();
   }
@@ -849,6 +909,17 @@ export class Presenter {
     const remove = new Set(selection);
     this.slide.ink.replace(this.slide.ink.strokes.filter((stroke) => !remove.has(stroke)));
     this.clearSelection();
+    this.redrawInk();
+    this.syncToolbar();
+    this.options.onChange?.();
+  }
+
+  private lassoRecolor(color: string): void {
+    const selection = this.selection;
+    if (!selection) return;
+    const recolored = recolorStrokes(selection, color);
+    this.slide.ink.replace(replaceStrokes(this.slide.ink.strokes, selection, recolored));
+    this.selection = recolored;
     this.redrawInk();
     this.syncToolbar();
     this.options.onChange?.();
@@ -892,6 +963,14 @@ export class Presenter {
       context.lineWidth = 1.5 / scale;
       context.strokeStyle = '#1f5fd6';
       context.strokeRect(bounds.minX - padding, bounds.minY - padding, bounds.maxX - bounds.minX + 2 * padding, bounds.maxY - bounds.minY + 2 * padding);
+      // Greifpunkt zum Vergrößern
+      context.setLineDash([]);
+      context.fillStyle = '#ffffff';
+      context.beginPath();
+      context.arc(bounds.maxX + padding, bounds.maxY + padding, HANDLE_PX / scale, 0, Math.PI * 2);
+      context.fill();
+      context.lineWidth = 2 / scale;
+      context.stroke();
     });
     if (this.lassoDrag) {
       this.selectionBar.classList.remove('is-visible');

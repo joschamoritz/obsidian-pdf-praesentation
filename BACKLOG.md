@@ -1,58 +1,33 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.12.1, lokal; auf GitHub liegt v0.10.0).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.0, lokal; auf GitHub liegt v0.12.1).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
-## Als Nächstes: iPad-Test von v0.11 bis v0.12.1
+## Als Nächstes: iPad-Test von v0.13.0
 
-Erst danach kommen neue Funktionen und der Upload auf GitHub.
-
-| Funktion | Seit | Worauf achten |
-|---|---|---|
-| **Glättung** Aus · Leicht · Stark, voreingestellt Leicht | v0.11.0 | Kommt die Schrift an GoodNotes heran? Ist Leicht zu schwach, Stark zu rund? Mit Schreib- und Druckschrift ausprobieren. Gespeichert werden die Rohpunkte, die Stärken lassen sich also nachjustieren, ohne alte Tinte zu verändern |
-| **Timer:** Farbe aus acht Farben (mit Pink) oder eigene, Effekt bei null, Ton | v0.12.0 / v0.12.1 | Kommt der Ton über AirPlay am Board an? Auch bei eingeschaltetem Stummschalter? Laut genug? Öffnet das „+“ den Farbwähler des iPads? |
-| **Zeichnen und halten:** Linie, Rechteck, Ellipse nach 0,55 s Stillstand | v0.12.0 | Löst es beim Schreiben ungewollt aus, etwa bei einer Denkpause mit aufgesetztem Stift? Dann Wartezeit verlängern oder Mindestgröße erhöhen |
-| **Lasso:** umkreisen, verschieben, kopieren, löschen | v0.12.0 | Fängt es Schrift sauber ein? Ruckelt das Verschieben auf vollen Tafelbildern? |
-| **Stiftablage:** vier Fächer statt Schnellfarben beim Stift | v0.12.0 | Ist das Ablegen verständlich? Reichen vier Fächer? |
-| **Leere Seite einfügen** liegt jetzt im Mehr-Feld | v0.12.0 | Fehlt der Knopf in der Leiste? Er musste weichen, damit die Leiste quer in eine Zeile passt |
+| Funktion | Worauf achten |
+|---|---|
+| **Laser** als durchgehende Spur; voreingestellt bleibt sie, solange der Stift aufliegt (wie GoodNotes), umschaltbar auf „Verblasst gleich“ | Ist die Spur bei schnellen Bewegungen jetzt eine Linie? Kommt sie schnell genug hinterher? |
+| **Zeichnen und halten** erkennt jetzt auch Dreieck und Pfeil (Schaft, dann ein oder zwei Haken zurück) | Wird ein Pfeil erkannt, wie du ihn zeichnest? Werden Dreiecke zu oft zu Rechtecken oder umgekehrt? |
+| **Lasso:** Umfärben über die Palette in der kleinen Leiste, Vergrößern am weißen Punkt unten rechts | Trifft der Finger bzw. Stift den Punkt gut? |
+| **Nach der Stunde:** Nach einer Präsentation aus einem Stundenentwurf, die mindestens zehn Minuten lief, drei Felder für die Reflexion | Kommt die Abfrage zur richtigen Zeit? Stört sie? „Nicht mehr fragen“ schaltet sie je Gerät ab |
 
 ## Zweiter Bildschirm: Browser-Empfänger
 
-**Nächster Schritt:** Verbindungstest am Board mit einem anderen Browser wiederholen, am besten Chrome. Die Testseite benennt eingebaute Android-Browser seit dem 12.11.2026 richtig. Danach entscheiden.
+**Nächster Schritt:** Verbindungstest am Board mit Chrome statt dem eingebauten Browser wiederholen (`unterricht.signifikation.de/verbindungstest`). Danach entscheiden.
 
-**Verbindungstest in der Schule (09.11.2026, 1:44 min, eingebauter Browser des Boards):**
+**Bisheriger Test (09.11.2026, eingebauter Browser des Boards):** iPad mit Dauerverbindung, Board nur über den Ersatzweg. Hin und zurück üblich 76 ms (iPad) und 159 ms (Board), 95 % unter 248 bzw. 346 ms, nichts verloren, keine Abbrüche. Datenprobe 8 MB in 6,4 s. Direkter Weg zwischen den Geräten kommt nicht zustande. Dem Board-Browser fehlt `Promise.withResolvers`. Eindruck: Tinte deutlich verzögert, für Folien ausreichend.
 
-| | iPad (Safari 27, iPadOS) | Board (Android, eingebauter Browser) |
-|---|---|---|
-| Verbindung | Dauerverbindung | nur Ersatzweg (Polling) |
-| Bis zum Server | 49 ms | 51 ms |
-| Zum anderen Gerät und zurück, üblich | 76 ms | 159 ms |
-| … langsamste 5 % | 248 ms | 346 ms |
-| Höchstwert | 329 ms | 501 ms |
-| Verloren / Abbrüche | 0 / 0 | 0 / 0 |
+**Folgerungen für einen späteren Bau:**
+- Das iPad rendert die Seiten als Bild in Board-Auflösung und schickt diese, kein PDF ans Board.
+- Tinte live geht, mit Dauerverbindung deutlich schneller.
+- Der Server muss den Ursprung von Obsidian zulassen (`ALLOWED_ORIGINS` im Repo `unterricht.signifikation`).
+- AirPlay bleibt immer der Rückweg.
 
-- Datenprobe 8 MB in 6,4 s (1,2 MB/s). Ein übliches Folien-PDF wäre also in wenigen Sekunden drüben.
-- Direkter Weg zwischen den Geräten: kommt nicht zustande. Der Umweg über den Server bleibt.
-- Board-Browser: Ihm fehlt `Promise.withResolvers`. Das aktuelle pdf.js läuft dort nicht.
-- Auf dem Board gibt es laut Nutzer weitere Browser.
-
-**Eindruck des Nutzers:** deutliche Verzögerung bei der Tinte, aber ausreichend, um Folien zu zeigen.
-
-**Folgerungen:**
-- Das Schul-WLAN lässt Dauerverbindungen zu, das iPad hatte eine. Am Board fehlte sie. Vermutlich lag das am alten eingebauten Browser, das zeigt der Test mit Chrome.
-- Kein PDF ans Board schicken. Das iPad rendert die Seiten selbst als Bild in Board-Auflösung (1920 × 1080) und schickt diese. Damit ist der Board-Browser fast egal, und es bleibt scharf.
-- Tinte live ist möglich, kommt aber spürbar später an, solange das Board nur den Ersatzweg hat.
-- Für das Plugin muss der Server den Ursprung von Obsidian zulassen (`ALLOWED_ORIGINS` im Repo `unterricht.signifikation`). Die Testseite lief in Safari, nicht in Obsidian.
-
-**Entscheidung offen:** Lohnt der Aufwand für randlose Folien und eine Ansicht nur für die Lehrkraft? AirPlay bleibt in jedem Fall der Rückweg.
+**Entscheidung offen:** Lohnt der Aufwand für randlose Folien und eine Ansicht nur für die Lehrkraft?
 
 ## Weitere Ideen
-
-| Idee | Herkunft | Was sie täte |
-|---|---|---|
-| Lasso: Farbe oder Größe der Auswahl ändern | GoodNotes | Auswahl umfärben oder vergrößern |
-| Zeichnen und halten: Dreieck und Pfeil erkennen | GoodNotes | weitere Formen |
-| „Nach der Stunde“ | Plugin-Bewertung 11.11.2026 | Beim Beenden drei kurze Felder für die Reflexion, direkt in den Entwurf geschrieben, mit der Verweildauer der Folien |
+Zurzeit keine offenen. Neue Wünsche hier eintragen.
 
 ## Noch zu prüfen
 - **Zoom-Einstellung am Board:** Nimmt sie die seitlichen Balken der AirPlay-Spiegelung weg?
@@ -60,11 +35,14 @@ Erst danach kommen neue Funktionen und der Upload auf GitHub.
 - **Sicheres Speichern im Ernstfall:** Konfliktkopien von iCloud und Umbenennen eines PDFs in Obsidian sind nur in Tests geprüft, nicht am echten Fall.
 
 ## Erledigt
-- v0.11.0: Glättung der Schrift
-- v0.12.0: Timer mit Farbe, Effekt und Ton · Lasso · Zeichnen und halten · Stiftablage
-- v0.12.1: Pink, Orange und eigene Farbe für den Timer; Schrift auf der Timerfarbe nach höherem Kontrast
-- 12.11.2026: Testseite benennt eingebaute Android-Browser richtig
-- Das lebendige Wochen-Dashboard ist ein eigenes Plugin und läuft in einer eigenen Sitzung, nicht hier
+| Version | Inhalt | iPad |
+|---|---|---|
+| v0.11.0 | Glättung der Schrift (Aus · Leicht · Stark) | geprüft 12.11.2026 |
+| v0.12.0 | Timer mit Farbe, Effekt und Ton · Lasso · Zeichnen und halten · Stiftablage · „Leere Seite einfügen“ im Mehr-Feld | geprüft 12.11.2026 |
+| v0.12.1 | Timer: Pink, Orange, eigene Farbe | geprüft 12.11.2026 |
+| v0.13.0 | Laser als Spur mit Halten · Dreieck und Pfeil · Lasso umfärben und vergrößern · Nach der Stunde | offen |
+
+Außerdem: Die Testseite benennt eingebaute Android-Browser richtig (12.11.2026). Das lebendige Wochen-Dashboard ist ein eigenes Plugin aus einer eigenen Sitzung.
 
 ## Bewusst nicht
 - Abstimmungen über Schüler-iPads, Zufallsauswahl mit Namen, Fotos von Schülerarbeiten: Das bräuchte einen Server, oder Schülerdaten würden per iCloud mitreisen.

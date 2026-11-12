@@ -801,3 +801,45 @@ button.pp-link-button:hover {
 .pp-selection-bar.is-visible {
   display: flex;
 }
+
+.pp-selection-colors {
+  display: none;
+  gap: 2px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.pp-selection-colors.is-visible {
+  display: flex;
+}
+
+/* Nach der Stunde */
+.pp-reflection-note {
+  margin-top: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.pp-reflection-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.pp-reflection-field textarea {
+  width: 100%;
+  min-height: 64px;
+  font-weight: 400;
+  resize: vertical;
+}
+
+.pp-reflection-dwell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}

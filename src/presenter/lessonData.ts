@@ -153,3 +153,65 @@ export function groupSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
+
+export interface ReflectionEntries {
+  good: string;
+  change: string;
+  observe: string;
+}
+
+const REFLECTION_SECTION = '## Reflexion & Notizen';
+const REFLECTION_HEADINGS: [keyof ReflectionEntries, string][] = [
+  ['good', '### Was hat gut funktioniert?'],
+  ['change', '### Was würde ich beim nächsten Mal ändern?'],
+  ['observe', '### Besondere Beobachtungen zur Lerngruppe'],
+];
+
+const isHeading = (line: string, maxLevel: number) => new RegExp(`^#{1,${maxLevel}}\\s`).test(line);
+/** Ein Trennstrich beendet den Abschnitt ebenfalls, darunter stehen in den Entwürfen oft Verweise */
+const isBreak = (line: string) => /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+
+/**
+ * Schreibt die Reflexion unter die drei Überschriften des Stundenentwurfs (Standard des Vaults).
+ * Vorhandener Text bleibt stehen, Neues kommt darunter. Fehlt der Abschnitt, entsteht er am Ende.
+ * Die Verweildauer steht als Zeile direkt unter „Reflexion & Notizen“.
+ */
+export function insertReflection(markdown: string, entries: ReflectionEntries, dwell = ''): string {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  let section = lines.findIndex((line) => line.trim() === REFLECTION_SECTION);
+  if (section < 0) {
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    lines.push('', REFLECTION_SECTION, '');
+    for (const [, heading] of REFLECTION_HEADINGS) lines.push(heading, '', '');
+    section = lines.findIndex((line) => line.trim() === REFLECTION_SECTION);
+  }
+  const sectionEnd = () => {
+    const next = lines.findIndex((line, index) => index > section && (isHeading(line, 2) || isBreak(line)));
+    return next < 0 ? lines.length : next;
+  };
+
+  for (const [key, heading] of REFLECTION_HEADINGS) {
+    const text = entries[key].trim();
+    if (!text) continue;
+    let at = lines.findIndex((line, index) => index > section && index < sectionEnd() && line.trim() === heading);
+    if (at < 0) {
+      // Überschrift fehlt: ans Ende des Abschnitts
+      let end = sectionEnd();
+      while (end > section + 1 && lines[end - 1].trim() === '') end--;
+      lines.splice(end, 0, '', heading, '');
+      at = end + 1;
+    }
+    let end = lines.findIndex((line, index) => index > at && (isHeading(line, 3) || isBreak(line)));
+    if (end < 0) end = lines.length;
+    let insert = end;
+    while (insert > at + 1 && lines[insert - 1].trim() === '') insert--;
+    const block = text.split(/\r?\n/);
+    const before = insert === at + 1 ? [] : [''];
+    // Nur eine Leerzeile zur nächsten Überschrift, der Rest der Notiz bleibt unberührt
+    const after = insert < lines.length && lines[insert].trim() !== '' ? [''] : [];
+    lines.splice(insert, 0, ...before, ...block, ...after);
+  }
+
+  if (dwell && !lines.some((line) => line.trim() === dwell)) lines.splice(section + 1, 0, '', dwell);
+  return lines.join('\n');
+}

@@ -39,11 +39,11 @@ Danach in Obsidian unter *Einstellungen → Community-Plugins* einschalten. Mit 
 | Marker | freihand oder gerade · Strichstärke · 8 Farben und eigene |
 | Formen | Linie, Pfeil, Rechteck, Ellipse · Strichstärke und Farbe des Stifts |
 | Radierer | ganzer Strich oder nur die Stelle · Größe |
-| Lasso | Tinte umkreisen, dann mit dem Stift verschieben, kopieren oder löschen. Die kleine Leiste über der Auswahl hat Kopieren, Löschen und Aufheben |
+| Lasso | Tinte umkreisen, dann mit dem Stift verschieben, kopieren oder löschen. Die kleine Leiste über der Auswahl hat Umfärben, Kopieren, Löschen und Aufheben. Der weiße Punkt unten rechts vergrößert und verkleinert |
 
 **Stiftablage:** Beim Stift stehen in der Leiste vier Fächer. Jedes Fach merkt sich Farbe, Stiftart, Strichstärke und Glättung, ein Tipp nimmt den ganzen Stift. Je dicker der Stift, desto größer der Punkt. Im Einstellungsfeld legt „Aktuellen Stift in Fach n ablegen“ den eingestellten Stift in das zuletzt gewählte Fach. Bei Marker und Formen sind es weiter vier Schnellfarben: Eine neu gewählte Farbe ersetzt die letzte.
 
-**Zeichnen und halten:** Bleibt der Stift am Ende eines Strichs kurz stehen, wird aus dem Strich eine gerade Linie, ein Rechteck oder eine Ellipse. Bei der Linie folgt das Ende dem Stift, bis er abgesetzt wird. Schrift und kleine Buchstaben bleiben, wie sie sind. Abschaltbar bei Stift und Marker.
+**Zeichnen und halten:** Bleibt der Stift am Ende eines Strichs kurz stehen, wird aus dem Strich eine gerade Linie, ein Pfeil, ein Dreieck, ein Rechteck oder eine Ellipse. Ein Pfeil entsteht in einem Zug: Schaft, dann ein oder zwei kurze Haken zurück. Bei Linie und Pfeil folgt das Ende dem Stift, bis er abgesetzt wird. Schrift und kleine Buchstaben bleiben, wie sie sind. Abschaltbar bei Stift und Marker.
 
 Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblättert wird dann über die Leiste, gezoomt weiter mit zwei Fingern.
 
@@ -51,7 +51,7 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 
 **Abdecken:** Mit dem Werkzeug „Abdecken“ zieht der Stift Flächen über die Folie, ein Stifttipp entfernt sie. Sie werden gespeichert. In der Stunde zieht der Finger sie weg wie ein Blatt auf dem Overheadprojektor, oder ein Tipp deckt sie ganz auf. Beim nächsten Öffnen liegt wieder alles drauf.
 
-**Zeiger:** Laserpunkt oder Schlüsselloch: Alles ist dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
+**Zeiger:** Laserpunkt mit leuchtender Spur oder Schlüsselloch. Die Spur bleibt, solange der Stift aufliegt, so lässt sich ein Bereich länger einkreisen; umschaltbar auf „Verblasst gleich“. Beim Schlüsselloch ist alles dunkel außer einem Sichtfenster, das Stift oder Finger verschiebt. Der zweite Tipp auf das Zeiger-Symbol wählt und stellt die Größe ein.
 
 **Mehr:** Das Feld mit den drei Punkten enthält:
 - **Leere Seite einfügen** hinter der aktuellen Seite.
@@ -62,7 +62,7 @@ Die Hand-Taste in der Leiste schaltet auf Zeichnen mit dem Finger um. Geblätter
 - **Zeile hervorheben:** Bei PDFs mit Zeilenzählung im Text ein Band über Zeile n.
 - **Als PDF mit Tinte sichern:** neben dem Original, ohne gesperrte Seiten.
 
-In der Seitenübersicht zeigt „Nur beschriebene“ den Ertrag der Stunde. Der Befehl „Verweildauer der letzten Präsentation einfügen“ schreibt eine Zeile für die Reflexion an den Cursor. Der Timer zählt nach dem Ablauf klein weiter.
+In der Seitenübersicht zeigt „Nur beschriebene“ den Ertrag der Stunde. Der Befehl „Verweildauer der letzten Präsentation einfügen“ schreibt eine Zeile für die Reflexion an den Cursor. **Nach der Stunde:** Lief eine Präsentation aus einem Stundenentwurf mindestens zehn Minuten, fragt das Plugin beim Beenden mit drei Feldern nach der Reflexion und schreibt sie unter die Überschriften in „Reflexion & Notizen“, die Verweildauer auf Wunsch dazu. Vorhandener Text bleibt stehen. „Nicht mehr fragen“ schaltet das je Gerät ab. Der Timer zählt nach dem Ablauf klein weiter.
 
 **Timer:** Das Uhr-Symbol öffnet die Einstellung für Dauer und Größe (klein bis riesig). Die Anzeige liegt über der Folie, lässt sich mit dem Finger verschieben, ein Tipp hält sie an. In der letzten Minute wird sie orange, am Ende rot. Farbe der Anzeige (acht Farben oder eigene über „+“), Effekt bei null (Blinken, Pulsieren, Aufleuchten der ganzen Fläche oder nichts) und ein Ton (Gong, Glocke, Dreiklang, Piepton oder aus) sind wählbar, „Ende vorführen“ zeigt beides zur Probe. Der Ton kommt über AirPlay aus den Lautsprechern am Board. Das iPad gibt Ton erst nach einer Berührung frei, das übernimmt der Start des Timers. „+ 1 Min.“ geht auch, während sie läuft.
 

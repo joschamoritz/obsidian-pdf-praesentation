@@ -59,3 +59,21 @@ export function replaceStrokes(all: Stroke[], selected: Stroke[], replacement: S
   const index = new Map(selected.map((stroke, i) => [stroke, i]));
   return all.map((stroke) => (index.has(stroke) ? replacement[index.get(stroke) as number] : stroke));
 }
+
+/** Vergrößert oder verkleinert um einen festen Punkt, Strichstärken wachsen mit. */
+export function scaleStrokes(strokes: Stroke[], originX: number, originY: number, factor: number): Stroke[] {
+  return strokes.map((stroke) => ({
+    ...stroke,
+    width: stroke.width * factor,
+    points: stroke.points.map((point) => ({
+      ...point,
+      x: originX + (point.x - originX) * factor,
+      y: originY + (point.y - originY) * factor,
+      w: point.w * factor,
+    })),
+  }));
+}
+
+export function recolorStrokes(strokes: Stroke[], color: string): Stroke[] {
+  return strokes.map((stroke) => ({ ...stroke, color }));
+}

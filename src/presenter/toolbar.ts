@@ -4,6 +4,7 @@ import {
   MARKER_PALETTE,
   PEN_PALETTE,
   PEN_TYPES,
+  SMOOTHING_LEVELS,
   sliderToWidth,
   widthToSlider,
   type EdgeMode,
@@ -344,7 +345,7 @@ export class Toolbar {
     const p = this.state.preferences;
     const key = JSON.stringify([
       this.panelMode, this.state.timerStatus, this.state.timerMinutes, p.timerSize, p.edgeMode, p.pointerMode, this.state.more,
-      p.tool, p.penType, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
+      p.tool, p.penType, p.penSmoothing, p.penColor, p.markerColor, p.markerStraight, p.shapeType, p.eraserMode,
       p.customPen, p.customMarker, this.state.sheetWidth,
     ]);
     if (key === this.panelKey) return;
@@ -496,6 +497,10 @@ export class Toolbar {
       chip.prepend(canvas);
       samples.push({ canvas, type });
     }
+    const smoothing = element('div', 'pp-chips', this.section('Glättung'));
+    for (const { level, label } of SMOOTHING_LEVELS) {
+      this.chip(smoothing, label, p.penSmoothing === level, () => this.actions.change({ penSmoothing: level }));
+    }
     this.widthSection('pen', 'penWidth', p);
     this.colorSection(PEN_PALETTE, p.customPen, p.penColor);
     const refresh = this.refreshPanelValues as (() => void) | null;
@@ -599,7 +604,10 @@ export class Toolbar {
       width: kind === 'marker' ? p.markerWidth : p.penWidth,
       points: [],
     };
-    if (p.tool === 'pen') stroke.penType = p.penType;
+    if (p.tool === 'pen') {
+      stroke.penType = p.penType;
+      stroke.smoothing = p.penSmoothing;
+    }
     if (p.tool === 'shape' || (p.tool === 'marker' && p.markerStraight)) {
       stroke.sharp = true;
       const type: ShapeType = p.tool === 'shape' ? p.shapeType : 'line';

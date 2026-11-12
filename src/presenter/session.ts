@@ -1,4 +1,4 @@
-import { PageInk, type PenType, type ShapeType } from './ink';
+import { PageInk, type PenType, type ShapeType, type Smoothing } from './ink';
 import type { StoredSlide } from './inkFile';
 import type { TimerSize } from './timer';
 import type { Tool } from './types';
@@ -131,6 +131,8 @@ export type PointerMode = 'laser' | 'spot';
 export interface Preferences {
   tool: Tool;
   penType: PenType;
+  /** Glättung für neue Stiftstriche */
+  penSmoothing: Smoothing;
   penColor: string;
   penWidth: number;
   markerColor: string;
@@ -192,6 +194,12 @@ export const MARKER_PALETTE: NamedColor[] = [
   { name: 'Grau', value: '#c9ced6' },
 ];
 
+export const SMOOTHING_LEVELS: { level: Smoothing; label: string }[] = [
+  { level: 'off', label: 'Aus' },
+  { level: 'light', label: 'Leicht' },
+  { level: 'strong', label: 'Stark' },
+];
+
 export const PEN_TYPES: { type: PenType; label: string }[] = [
   { type: 'ball', label: 'Kugelschreiber' },
   { type: 'fountain', label: 'Füller' },
@@ -229,6 +237,7 @@ const TOOLS: Tool[] = ['laser', 'pen', 'marker', 'eraser', 'shape', 'cover'];
 const DEFAULTS: Preferences = {
   tool: 'pen',
   penType: 'ball',
+  penSmoothing: 'light',
   penColor: '#d92626',
   penWidth: 0.0032,
   markerColor: '#ffe14d',
@@ -259,6 +268,7 @@ export function normalizePreferences(stored: unknown): Preferences {
   if (!TOOLS.includes(preferences.tool)) preferences.tool = DEFAULTS.tool;
   if (!['small', 'medium', 'large', 'huge'].includes(preferences.timerSize)) preferences.timerSize = DEFAULTS.timerSize;
   if (!['page', 'black'].includes(preferences.edgeMode)) preferences.edgeMode = DEFAULTS.edgeMode;
+  if (!['off', 'light', 'strong'].includes(preferences.penSmoothing)) preferences.penSmoothing = DEFAULTS.penSmoothing;
   if (!['laser', 'spot'].includes(preferences.pointerMode)) preferences.pointerMode = DEFAULTS.pointerMode;
   for (const key of ['timerX', 'timerY'] as const) {
     if (typeof preferences[key] !== 'number' || !Number.isFinite(preferences[key])) preferences[key] = DEFAULTS[key];

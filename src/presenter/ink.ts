@@ -6,6 +6,8 @@ import { getStroke } from 'perfect-freehand';
 export type InkKind = 'pen' | 'marker';
 export type PenType = 'ball' | 'fountain' | 'fineliner' | 'brush';
 export type ShapeType = 'line' | 'arrow' | 'rectangle' | 'ellipse';
+/** Wie stark zittrige Handbewegungen geglättet werden. Ältere Striche ohne Angabe bleiben, wie sie waren. */
+export type Smoothing = 'off' | 'light' | 'strong';
 
 export interface InkPoint {
   x: number;
@@ -21,6 +23,7 @@ export interface Stroke {
   color: string;
   width: number;
   penType?: PenType;
+  smoothing?: Smoothing;
   /** Gerade Verbindungen statt geglätteter Kurve, für Formen und den geraden Marker */
   sharp?: boolean;
   points: InkPoint[];
@@ -309,7 +312,7 @@ const OUTLINE_SCALE = 4000;
  * die Stiftart fest: Mit thinning 1 und der Breite als Druck folgt der Umriss ihr genau.
  */
 export function outlinePoints(stroke: Stroke, smooth = true): number[][] {
-  const points = smooth ? smoothedPoints(stroke.points) : stroke.points;
+  const points = smooth ? smoothedPoints(stabilizedPoints(stroke.points, stabilizerSigma(stroke))) : stroke.points;
   const widest = points.reduce((max, point) => Math.max(max, point.w), 0);
   if (!(widest > 0)) return [];
   const input = points.map((point) => [
@@ -327,6 +330,65 @@ export function outlinePoints(stroke: Stroke, smooth = true): number[][] {
     last: true,
   });
   return outline.map(([x, y]) => [x / OUTLINE_SCALE, y / OUTLINE_SCALE]);
+}
+
+/**
+ * Reichweite der Glättung in Seitenbreiten, entlang des Strichs gemessen. Auf dem iPad ist ein
+ * Bildschirmpixel etwa 0,00085 Seitenbreiten. Leicht nimmt das Zittern, Stark auch kleine Wackler.
+ */
+const STABILIZER_SIGMA: Record<Smoothing, number> = { off: 0, light: 0.002, strong: 0.004 };
+
+/** Im Zoom Geschriebenes ist feiner: Dort liegen die Punkte dichter, und die Glättung schrumpft mit. */
+export function stabilizerSigma(stroke: Stroke): number {
+  const sigma = STABILIZER_SIGMA[stroke.smoothing ?? 'off'] ?? 0;
+  if (!sigma || stroke.sharp || stroke.points.length < 3) return 0;
+  const steps = stroke.points
+    .slice(1)
+    .map((point, index) => Math.hypot(point.x - stroke.points[index].x, point.y - stroke.points[index].y))
+    .sort((a, b) => a - b);
+  const typical = steps[steps.length >> 1];
+  const zoom = typical > 0 ? Math.max(1, BACKTRACK_TOLERANCE / (3 * typical)) : 1;
+  return sigma / zoom;
+}
+
+/**
+ * Glättet den Strich wie ein Stabilisator: Jeder Punkt wird zum gewichteten Mittel seiner Nachbarn
+ * entlang des Strichs. Zu den Enden hin wird das Fenster schmaler, deshalb bleiben Anfang und Ende
+ * stehen, und beim Schreiben bleibt die Spitze genau am Stift. Was schon weiter zurückliegt, setzt sich
+ * während des Schreibens noch ruhig. Nur fürs Zeichnen, die gespeicherten Punkte bleiben roh.
+ */
+export function stabilizedPoints(points: InkPoint[], sigma: number): InkPoint[] {
+  if (!(sigma > 0) || points.length < 3) return points;
+  const along = [0];
+  for (let i = 1; i < points.length; i++) {
+    along.push(along[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+  }
+  const total = along[along.length - 1];
+  const result: InkPoint[] = [];
+  let from = 0;
+  for (let i = 0; i < points.length; i++) {
+    const reach = Math.min(3 * sigma, along[i], total - along[i]);
+    if (reach <= 0) {
+      result.push(points[i]);
+      continue;
+    }
+    const spread = reach / 3;
+    while (along[from] < along[i] - reach) from++;
+    let weights = 0;
+    let x = 0;
+    let y = 0;
+    let w = 0;
+    for (let j = from; j < points.length && along[j] <= along[i] + reach; j++) {
+      const d = (along[j] - along[i]) / spread;
+      const weight = Math.exp(-0.5 * d * d);
+      weights += weight;
+      x += points[j].x * weight;
+      y += points[j].y * weight;
+      w += points[j].w * weight;
+    }
+    result.push({ x: x / weights, y: y / weights, p: points[i].p, w: w / weights });
+  }
+  return result;
 }
 
 const SMOOTHING_PASSES = 2;

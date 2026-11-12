@@ -57,6 +57,12 @@ panel('Vorher: rohe Punkte, Umriss wie in v0.5', (context, stroke) => {
   context.fill();
 });
 
-panel('Nachher: aufgeräumt und geglättet', (context, stroke) => drawStroke(context, cleanStroke(stroke)));
+if (params.get('glaettung') !== null) {
+  for (const [level, label] of [['off', 'Glättung aus (bisher)'], ['light', 'Glättung leicht'], ['strong', 'Glättung stark']] as const) {
+    panel(label, (context, stroke) => drawStroke(context, { ...cleanStroke(stroke), smoothing: level }));
+  }
+} else {
+  panel('Nachher: aufgeräumt und geglättet', (context, stroke) => drawStroke(context, cleanStroke(stroke)));
+}
 
 Object.assign(window, { raw, cleanStroke, getStroke });

@@ -6,6 +6,8 @@ Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 ## Als Nächstes
 
 ### Schrift glätten wie GoodNotes
+**Stand:** in v0.11.0 gebaut (Aus · Leicht · Stark, voreingestellt Leicht), am iPad noch nicht geprüft. Danach die Stärken nachjustieren oder den Punkt streichen.
+
 **Rückmeldung (11.11.2026):** GoodNotes schreibt schöner, weil es zittrige Bewegungen glättet und die Handschrift lesbarer wirkt.
 
 **Befund im Code:** Die Glättung ist bisher bewusst schwach. `perfect-freehand` läuft mit `streamline: 0`, `smoothing: 0.3`, danach folgen zwei leichte Glättungsdurchgänge (`src/presenter/ink.ts`). Ziel war bisher, dass die Spitze ohne Verzögerung am Stift bleibt.

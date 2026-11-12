@@ -464,7 +464,7 @@ export class Presenter {
       const kind: InkKind = tool;
       const stroke: Stroke =
         kind === 'pen'
-          ? { kind, color: this.preferences.penColor, width: this.preferences.penWidth, penType: this.preferences.penType, points: [] }
+          ? { kind, color: this.preferences.penColor, width: this.preferences.penWidth, penType: this.preferences.penType, smoothing: this.preferences.penSmoothing, points: [] }
           : { kind, color: this.preferences.markerColor, width: this.preferences.markerWidth, points: [] };
       appendPoint(stroke, point.x, point.y, this.pressure(event), this.view.zoom);
       this.activeStroke = stroke;

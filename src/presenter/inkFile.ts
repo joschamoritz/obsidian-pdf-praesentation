@@ -1,5 +1,5 @@
 // Das Dateiformat der gespeicherten Tinte. Ohne Dateizugriff, damit es sich testen lässt.
-import { cleanStroke, type InkKind, type InkPoint, type PenType, type Stroke } from './ink';
+import { cleanStroke, type InkKind, type InkPoint, type PenType, type Smoothing, type Stroke } from './ink';
 import { PresentationSession, type Cover, type Slide } from './session';
 
 /** Ab Version 2 sind Striche frei von überlappenden Stiftdaten. Ältere werden beim Laden aufgeräumt. */
@@ -27,6 +27,8 @@ interface StoredStroke {
   c: string;
   b: number;
   t?: PenType;
+  /** Glättung, nur wenn eingeschaltet */
+  g?: Smoothing;
   s?: 1;
   /** x, y, Druck, Breite je Punkt hintereinander, das spart etwa die Hälfte gegenüber Objekten */
   d: number[];
@@ -64,6 +66,7 @@ function storeStroke(stroke: Stroke): StoredStroke {
   }
   const stored: StoredStroke = { k: stroke.kind === 'marker' ? 'm' : 'p', c: stroke.color, b: round(stroke.width, 5), d: data };
   if (stroke.penType) stored.t = stroke.penType;
+  if (stroke.smoothing && stroke.smoothing !== 'off') stored.g = stroke.smoothing;
   if (stroke.sharp) stored.s = 1;
   return stored;
 }
@@ -79,6 +82,7 @@ function restoreStroke(stored: StoredStroke): Stroke | null {
   const kind: InkKind = stored.k === 'm' ? 'marker' : 'pen';
   const stroke: Stroke = { kind, color: stored.c, width: stored.b, points };
   if (stored.t) stroke.penType = stored.t;
+  if (stored.g === 'light' || stored.g === 'strong') stroke.smoothing = stored.g;
   if (stored.s) stroke.sharp = true;
   return stroke;
 }

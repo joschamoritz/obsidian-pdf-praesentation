@@ -35,7 +35,7 @@ Danach in Obsidian unter *Einstellungen → Community-Plugins* einschalten. Mit 
 
 | Werkzeug | Einstellungen |
 |---|---|
-| Stift | Kugelschreiber, Füller, Fineliner, Pinsel · Strichstärke · 12 Farben und eigene |
+| Stift | Kugelschreiber, Füller, Fineliner, Pinsel · Glättung aus, leicht oder stark · Strichstärke · 12 Farben und eigene |
 | Marker | freihand oder gerade · Strichstärke · 8 Farben und eigene |
 | Formen | Linie, Pfeil, Rechteck, Ellipse · Strichstärke und Farbe des Stifts |
 | Radierer | ganzer Strich oder nur die Stelle · Größe |

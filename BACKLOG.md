@@ -1,6 +1,6 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.2 lokal, auf GitHub v0.13.1).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.2, auch auf GitHub).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
 ## Als Nächstes

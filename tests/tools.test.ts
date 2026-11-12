@@ -130,6 +130,8 @@ describe('Timer am Ende', () => {
     expect(readableOn('#141416')).toBe('#fff');
     expect(readableOn('#ffffff')).toBe('#111');
     expect(readableOn('#1f4fa8')).toBe('#fff');
+    expect(readableOn('#d6247a')).toBe('#fff');
+    expect(readableOn('#ff66cc')).toBe('#111');
     expect(readableOn('kaputt')).toBe('#fff');
   });
 

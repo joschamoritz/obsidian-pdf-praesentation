@@ -145,6 +145,8 @@ export const TIMER_COLORS: NamedColor[] = [
   { name: 'Grün', value: '#17703a' },
   { name: 'Lila', value: '#6b3fa0' },
   { name: 'Petrol', value: '#0f6e78' },
+  { name: 'Pink', value: '#d6247a' },
+  { name: 'Orange', value: '#c2560c' },
   { name: 'Weiß', value: '#ffffff' },
 ];
 

@@ -104,7 +104,9 @@ export function readableOn(color: string): string {
     const value = parseInt(part, 16) / 255;
     return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
   });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#111' : '#fff';
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Die Farbe mit dem höheren Kontrast (WCAG): Weiß bis etwa mittlerer Helligkeit, darüber Schwarz
+  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05 ? '#fff' : '#111';
 }
 
 function clampDuration(ms: number): number {

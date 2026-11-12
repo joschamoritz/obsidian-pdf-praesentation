@@ -428,6 +428,24 @@ export class Toolbar {
       element('span', 'pp-swatch', button).style.background = value;
       button.addEventListener('click', () => this.actions.change({ timerColor: value }));
     }
+    // Eigene Farbe über den Farbwähler des Systems. Sie bleibt als Punkt stehen, solange sie gewählt ist.
+    const own = !TIMER_COLORS.some((entry) => entry.value === p.timerColor);
+    if (own) {
+      const button = element('button', 'pp-button pp-color is-active', colors);
+      button.title = 'Eigene Farbe';
+      button.setAttribute('aria-label', 'Timerfarbe eigene');
+      button.setAttribute('aria-pressed', 'true');
+      element('span', 'pp-swatch', button).style.background = p.timerColor;
+    }
+    const add = element('label', 'pp-button pp-color-add', colors);
+    add.title = 'Eigene Farbe';
+    add.innerHTML = icons.plus;
+    const picker = element('input', 'pp-color-input', add);
+    picker.type = 'color';
+    picker.value = p.timerColor;
+    picker.setAttribute('aria-label', 'Eigene Timerfarbe wählen');
+    picker.addEventListener('click', () => this.restartTimer());
+    picker.addEventListener('change', () => this.actions.change({ timerColor: picker.value.toLowerCase() }));
     const effects = element('div', 'pp-chips', this.section('Bei null'));
     for (const { effect, label } of TIMER_EFFECTS) {
       this.chip(effects, label, p.timerEffect === effect, () => this.actions.change({ timerEffect: effect }));

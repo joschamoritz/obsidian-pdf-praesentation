@@ -1,28 +1,26 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.12.0).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.12.1, lokal; auf GitHub liegt v0.10.0).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
-## Als Nächstes
+## Als Nächstes: iPad-Test von v0.11 bis v0.12.1
 
-### Schrift glätten wie GoodNotes
-**Stand:** in v0.11.0 gebaut (Aus · Leicht · Stark, voreingestellt Leicht), am iPad noch nicht geprüft. Danach die Stärken nachjustieren oder den Punkt streichen.
+Erst danach kommen neue Funktionen und der Upload auf GitHub.
 
-**Rückmeldung (11.11.2026):** GoodNotes schreibt schöner, weil es zittrige Bewegungen glättet und die Handschrift lesbarer wirkt.
-
-**Befund im Code:** Die Glättung ist bisher bewusst schwach. `perfect-freehand` läuft mit `streamline: 0`, `smoothing: 0.3`, danach folgen zwei leichte Glättungsdurchgänge (`src/presenter/ink.ts`). Ziel war bisher, dass die Spitze ohne Verzögerung am Stift bleibt.
-
-**Idee:**
-- Beim Schreiben leicht nachziehen, damit die Spitze am Stift bleibt.
-- Nach dem Absetzen den Strich einmal stärker geglättet neu zeichnen. GoodNotes wirkt ähnlich.
-- Einstellung je Stift: Aus · Leicht · Stark.
-- Gespeichert werden weiter die Rohpunkte. Die Glättung entsteht beim Zeichnen, damit sich alte Tinte nicht verändert und die Stufe später änderbar bleibt.
-
-**Prüfen:** am iPad mit echtem Pencil, mit Schreibschrift und Druckschrift. Am PC ist das nicht zu beurteilen.
+| Funktion | Seit | Worauf achten |
+|---|---|---|
+| **Glättung** Aus · Leicht · Stark, voreingestellt Leicht | v0.11.0 | Kommt die Schrift an GoodNotes heran? Ist Leicht zu schwach, Stark zu rund? Mit Schreib- und Druckschrift ausprobieren. Gespeichert werden die Rohpunkte, die Stärken lassen sich also nachjustieren, ohne alte Tinte zu verändern |
+| **Timer:** Farbe aus acht Farben (mit Pink) oder eigene, Effekt bei null, Ton | v0.12.0 / v0.12.1 | Kommt der Ton über AirPlay am Board an? Auch bei eingeschaltetem Stummschalter? Laut genug? Öffnet das „+“ den Farbwähler des iPads? |
+| **Zeichnen und halten:** Linie, Rechteck, Ellipse nach 0,55 s Stillstand | v0.12.0 | Löst es beim Schreiben ungewollt aus, etwa bei einer Denkpause mit aufgesetztem Stift? Dann Wartezeit verlängern oder Mindestgröße erhöhen |
+| **Lasso:** umkreisen, verschieben, kopieren, löschen | v0.12.0 | Fängt es Schrift sauber ein? Ruckelt das Verschieben auf vollen Tafelbildern? |
+| **Stiftablage:** vier Fächer statt Schnellfarben beim Stift | v0.12.0 | Ist das Ablegen verständlich? Reichen vier Fächer? |
+| **Leere Seite einfügen** liegt jetzt im Mehr-Feld | v0.12.0 | Fehlt der Knopf in der Leiste? Er musste weichen, damit die Leiste quer in eine Zeile passt |
 
 ## Zweiter Bildschirm: Browser-Empfänger
 
-**Verbindungstest in der Schule (09.11.2026, 1:44 min):**
+**Nächster Schritt:** Verbindungstest am Board mit einem anderen Browser wiederholen, am besten Chrome. Die Testseite benennt eingebaute Android-Browser seit dem 12.11.2026 richtig. Danach entscheiden.
+
+**Verbindungstest in der Schule (09.11.2026, 1:44 min, eingebauter Browser des Boards):**
 
 | | iPad (Safari 27, iPadOS) | Board (Android, eingebauter Browser) |
 |---|---|---|
@@ -36,26 +34,17 @@ Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 - Datenprobe 8 MB in 6,4 s (1,2 MB/s). Ein übliches Folien-PDF wäre also in wenigen Sekunden drüben.
 - Direkter Weg zwischen den Geräten: kommt nicht zustande. Der Umweg über den Server bleibt.
 - Board-Browser: Ihm fehlt `Promise.withResolvers`. Das aktuelle pdf.js läuft dort nicht.
-- Die Testseite nennt den Board-Browser „Safari 4“. Das ist ein Erkennungsfehler der Testseite: Android-WebViews tragen `Version/4.0` vor `Chrome/…` in der Kennung. Gemeint ist ein älterer eingebauter Chromium-Browser.
+- Auf dem Board gibt es laut Nutzer weitere Browser.
 
 **Eindruck des Nutzers:** deutliche Verzögerung bei der Tinte, aber ausreichend, um Folien zu zeigen.
 
 **Folgerungen:**
-- Das Schul-WLAN lässt Dauerverbindungen zu, das iPad hatte eine. Am Board fehlt sie. Ursache ist entweder dessen alter Browser oder dessen Netzanschluss. Prüfen: Gibt es auf dem Board einen anderen Browser, etwa Chrome aus dem Store, oder ein Browser-Update?
-- Kein PDF ans Board schicken. Das iPad rendert die Seiten selbst als Bild in Board-Auflösung (1920 × 1080) und schickt diese. Damit ist der alte Browser egal, und es bleibt scharf.
+- Das Schul-WLAN lässt Dauerverbindungen zu, das iPad hatte eine. Am Board fehlte sie. Vermutlich lag das am alten eingebauten Browser, das zeigt der Test mit Chrome.
+- Kein PDF ans Board schicken. Das iPad rendert die Seiten selbst als Bild in Board-Auflösung (1920 × 1080) und schickt diese. Damit ist der Board-Browser fast egal, und es bleibt scharf.
 - Tinte live ist möglich, kommt aber spürbar später an, solange das Board nur den Ersatzweg hat.
 - Für das Plugin muss der Server den Ursprung von Obsidian zulassen (`ALLOWED_ORIGINS` im Repo `unterricht.signifikation`). Die Testseite lief in Safari, nicht in Obsidian.
 
 **Entscheidung offen:** Lohnt der Aufwand für randlose Folien und eine Ansicht nur für die Lehrkraft? AirPlay bleibt in jedem Fall der Rückweg.
-
-## Gebaut in v0.12.0, am iPad noch zu prüfen
-
-| Funktion | Worauf achten |
-|---|---|
-| **Timer:** Farbe, Effekt bei null (Blinken, Pulsieren, Aufleuchten), Ton (Gong, Glocke, Dreiklang, Piepton) | Kommt der Ton über AirPlay am Board an? Klingt er auch bei eingeschaltetem Stummschalter? Ist er laut genug? |
-| **Zeichnen und halten:** Linie, Rechteck, Ellipse nach 0,55 s Stillstand | Löst es beim Schreiben ungewollt aus, etwa bei einer Denkpause mit aufgesetztem Stift? Dann Wartezeit verlängern oder Mindestgröße erhöhen |
-| **Lasso:** umkreisen, verschieben, kopieren, löschen; „Leere Seite einfügen“ dafür ins Mehr-Feld | Fängt das Lasso Schrift sauber ein? Ruckelt das Verschieben bei vielen Strichen? |
-| **Stiftablage:** vier Fächer statt Schnellfarben beim Stift | Ist das Ablegen verständlich? Reichen vier Fächer? |
 
 ## Weitere Ideen
 
@@ -63,11 +52,19 @@ Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 |---|---|---|
 | Lasso: Farbe oder Größe der Auswahl ändern | GoodNotes | Auswahl umfärben oder vergrößern |
 | Zeichnen und halten: Dreieck und Pfeil erkennen | GoodNotes | weitere Formen |
+| „Nach der Stunde“ | Plugin-Bewertung 11.11.2026 | Beim Beenden drei kurze Felder für die Reflexion, direkt in den Entwurf geschrieben, mit der Verweildauer der Folien |
 
 ## Noch zu prüfen
 - **Zoom-Einstellung am Board:** Nimmt sie die seitlichen Balken der AirPlay-Spiegelung weg?
 - **Druck beim Schreiben:** Reagieren Füller und Pinsel passend auf den Druck des Pencils?
 - **Sicheres Speichern im Ernstfall:** Konfliktkopien von iCloud und Umbenennen eines PDFs in Obsidian sind nur in Tests geprüft, nicht am echten Fall.
+
+## Erledigt
+- v0.11.0: Glättung der Schrift
+- v0.12.0: Timer mit Farbe, Effekt und Ton · Lasso · Zeichnen und halten · Stiftablage
+- v0.12.1: Pink, Orange und eigene Farbe für den Timer; Schrift auf der Timerfarbe nach höherem Kontrast
+- 12.11.2026: Testseite benennt eingebaute Android-Browser richtig
+- Das lebendige Wochen-Dashboard ist ein eigenes Plugin und läuft in einer eigenen Sitzung, nicht hier
 
 ## Bewusst nicht
 - Abstimmungen über Schüler-iPads, Zufallsauswahl mit Namen, Fotos von Schülerarbeiten: Das bräuchte einen Server, oder Schülerdaten würden per iCloud mitreisen.

@@ -1,15 +1,11 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.1, lokal; auf GitHub liegt v0.12.1).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.1, auch auf GitHub).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
-## Als Nächstes: iPad-Test von v0.13.1
+## Als Nächstes
 
-v0.13.0 lief am iPad fast durchweg (12.11.2026). Einziger Befund: Die Laserspur war deutlich dicker als vorher. Ursache: perfect-freehand rechnet mit size als Halbmesser-Maß, die Spur wurde so etwa doppelt so breit, mit Schein rund dreimal. v0.13.1 setzt Mittel wieder auf die alte Breite (Kern etwa 5 px auf dem iPad) und macht die Stärke wählbar: fein, mittel, kräftig.
-
-| Funktion | Worauf achten |
-|---|---|
-| **Laser** als durchgehende Spur; voreingestellt bleibt sie, solange der Stift aufliegt (wie GoodNotes), umschaltbar auf „Verblasst gleich“; Stärke fein, mittel, kräftig | Passt Mittel jetzt? Sonst eine andere Stärke wählen oder die Werte nachjustieren |
+Alles bis v0.13.1 ist am iPad geprüft. Offen ist der Browser-Empfänger (unten), neue Wünsche kommen unter „Weitere Ideen“.
 
 ## Zweiter Bildschirm: Browser-Empfänger
 
@@ -40,7 +36,7 @@ Zurzeit keine offenen. Neue Wünsche hier eintragen.
 | v0.12.0 | Timer mit Farbe, Effekt und Ton · Lasso · Zeichnen und halten · Stiftablage · „Leere Seite einfügen“ im Mehr-Feld | geprüft 12.11.2026 |
 | v0.12.1 | Timer: Pink, Orange, eigene Farbe | geprüft 12.11.2026 |
 | v0.13.0 | Laser als Spur mit Halten · Dreieck und Pfeil · Lasso umfärben und vergrößern · Nach der Stunde | geprüft 12.11.2026, Laser zu dick |
-| v0.13.1 | Laserbreite wie früher, Stärke wählbar | offen |
+| v0.13.1 | Laserbreite wie früher, Stärke wählbar | geprüft 12.11.2026 |
 
 Außerdem: Die Testseite benennt eingebaute Android-Browser richtig (12.11.2026). Das lebendige Wochen-Dashboard ist ein eigenes Plugin aus einer eigenen Sitzung.
 

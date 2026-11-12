@@ -145,6 +145,7 @@ export interface TimerWidgetOptions {
 }
 
 const TICK_MS = 250;
+const LATE_SIGNAL_MS = 3000;
 const DRAG_SLOP_PX = 6;
 
 /** Die sichtbare Anzeige. Ein Tipp hält an und setzt fort, Ziehen verschiebt sie. */
@@ -223,7 +224,8 @@ export class TimerWidget {
       this.interval = 0;
     }
     if (status !== this.lastStatus) {
-      const finished = this.lastStatus === 'running' && status === 'finished';
+      // Nur direkt beim Ablauf. War die App im Hintergrund, käme das Signal sonst Minuten später.
+      const finished = this.lastStatus === 'running' && status === 'finished' && this.timer.overtime < LATE_SIGNAL_MS;
       this.lastStatus = status;
       this.options.onStatusChange();
       if (finished) this.options.onFinished?.();

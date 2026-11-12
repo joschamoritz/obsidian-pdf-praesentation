@@ -177,6 +177,7 @@ const isBreak = (line: string) => /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line);
  * Die Verweildauer steht als Zeile direkt unter „Reflexion & Notizen“.
  */
 export function insertReflection(markdown: string, entries: ReflectionEntries, dwell = ''): string {
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   let section = lines.findIndex((line) => line.trim() === REFLECTION_SECTION);
   if (section < 0) {
@@ -213,5 +214,5 @@ export function insertReflection(markdown: string, entries: ReflectionEntries, d
   }
 
   if (dwell && !lines.some((line) => line.trim() === dwell)) lines.splice(section + 1, 0, '', dwell);
-  return lines.join('\n');
+  return lines.join(newline);
 }

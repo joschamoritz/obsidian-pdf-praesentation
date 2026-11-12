@@ -211,7 +211,10 @@ export class Presenter {
     this.selectionBar = document.createElement('div');
     this.selectionBar.className = 'pp-selection-bar';
     for (const [icon, label, action] of [
-      ['palette', 'Auswahl umfärben', () => this.selectionColors.classList.toggle('is-visible')],
+      ['palette', 'Auswahl umfärben', () => {
+        this.selectionColors.classList.toggle('is-visible');
+        this.scheduleLive();
+      }],
       ['copy', 'Auswahl kopieren', () => this.lassoDuplicate()],
       ['trash', 'Auswahl löschen', () => this.lassoDelete()],
       ['close', 'Auswahl aufheben', () => this.clearSelection()],
@@ -305,7 +308,7 @@ export class Presenter {
         this.timerChanged();
       },
       timerStartPause: () => {
-        this.sound.unlock();
+        if (this.preferences.timerSound !== 'off') this.sound.unlock();
         this.timer.timer.toggle();
         this.timerChanged();
       },
@@ -365,7 +368,12 @@ export class Presenter {
   private bindInput(): void {
     const stage = this.stage;
     // Das iPad gibt Ton erst nach einer Berührung frei. Jeder Tipp holt das nach.
-    for (const type of ['pointerup', 'click'] as const) this.root.addEventListener(type, () => this.sound.unlock(), true);
+    // Nur wenn ein Ton gewählt ist: Sonst belegt das Plugin ohne Grund die Audiositzung, und Musik im Hintergrund kann verstummen.
+    for (const type of ['pointerup', 'click'] as const) {
+      this.root.addEventListener(type, () => {
+        if (this.preferences.timerSound !== 'off') this.sound.unlock();
+      }, true);
+    }
     stage.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       try {
@@ -405,6 +413,7 @@ export class Presenter {
     const key = event.key;
     let handled = true;
     if (this.overview && key === 'Escape') this.closeOverview();
+    else if (key === 'Escape' && this.selection) this.clearSelection();
     else if (key === 'Escape') this.close();
     else if ((event.ctrlKey || event.metaKey) && key.toLowerCase() === 'y') this.redo();
     else if ((event.ctrlKey || event.metaKey) && key.toLowerCase() === 'z') {
@@ -1515,6 +1524,7 @@ export class Presenter {
 
   private startReplay(): void {
     this.stopReplay();
+    this.clearSelection();
     const strokes = this.slide.ink.strokes;
     if (!strokes.length) return;
     this.clearCanvas(this.markerLayer);

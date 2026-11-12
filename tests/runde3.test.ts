@@ -146,6 +146,13 @@ describe('Nach der Stunde', () => {
     expect(result.endsWith('---\nGehört zu: [[Reihe]]\n')).toBe(true);
   });
 
+  it('behält die Zeilenenden der Notiz', () => {
+    const crlf = NOTE.replace(/\n/g, '\r\n');
+    const result = insertReflection(crlf, { good: 'gut', change: '', observe: '' });
+    expect(result.includes('gut')).toBe(true);
+    expect(result.replace(/\r\n/g, '').includes('\n')).toBe(false);
+  });
+
   it('legt den Abschnitt an, wenn er fehlt, und lässt Leerzeilen anderswo stehen', () => {
     const note = '# Notiz\n\n\n\nAbsatz mit Abstand\n';
     const result = insertReflection(note, { good: 'gut', change: 'anders', observe: '' });

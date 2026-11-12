@@ -122,8 +122,10 @@ export class Laser {
       context.fill();
     }
 
+    // Mit Halten und aufliegendem Stift ändert sich nur etwas, wenn er sich bewegt. move() und end() wecken die Schleife.
+    const idle = holding && this.releasedAt === null;
     const stillVisible = this.releasedAt === null || fade > 0 || (!holding && this.points.length > 0);
-    if (stillVisible) this.schedule();
+    if (stillVisible && !idle) this.schedule();
   }
 }
 

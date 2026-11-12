@@ -270,9 +270,10 @@ export default class PdfPraesentationPlugin extends Plugin {
     if (!lesson || this.lastDwellMs < REFLECTION_AFTER_MS || !reflectionWanted()) return;
     const note = this.app.vault.getAbstractFileByPath(lesson.notePath);
     if (!(note instanceof TFile)) return;
-    new ReflectionModal(this.app, note.basename, this.lastDwell, (entries, withDwell) => {
+    const dwell = this.lastDwell;
+    new ReflectionModal(this.app, note.basename, dwell, (entries, withDwell) => {
       void this.app.vault
-        .process(note, (text) => insertReflection(text, entries, withDwell ? this.lastDwell : ''))
+        .process(note, (text) => insertReflection(text, entries, withDwell ? dwell : ''))
         .then(() => new Notice(`Reflexion steht in „${note.basename}“.`))
         .catch(() => new Notice('Die Reflexion ließ sich nicht speichern. Bitte von Hand eintragen.', NOTICE_MS));
     }).open();

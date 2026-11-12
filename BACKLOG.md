@@ -1,6 +1,6 @@
 # Backlog
 
-Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.1, auch auf GitHub).
+Ideen und offene Prüfungen für das Plugin. Stand: 12.11.2026 (v0.13.2 lokal, auf GitHub v0.13.1).
 Rückmeldungen vom iPad haben Vorrang vor neuen Funktionen.
 
 ## Als Nächstes
@@ -37,8 +37,25 @@ Zurzeit keine offenen. Neue Wünsche hier eintragen.
 | v0.12.1 | Timer: Pink, Orange, eigene Farbe | geprüft 12.11.2026 |
 | v0.13.0 | Laser als Spur mit Halten · Dreieck und Pfeil · Lasso umfärben und vergrößern · Nach der Stunde | geprüft 12.11.2026, Laser zu dick |
 | v0.13.1 | Laserbreite wie früher, Stärke wählbar | geprüft 12.11.2026 |
+| v0.13.2 | Code-Review des neuen Codes, siehe unten | offen, ändert am iPad kaum Sichtbares |
 
 Außerdem: Die Testseite benennt eingebaute Android-Browser richtig (12.11.2026). Das lebendige Wochen-Dashboard ist ein eigenes Plugin aus einer eigenen Sitzung.
+
+## Code-Review 12.11.2026 (v0.13.2)
+
+Durchgesehen: alles seit v0.10 (Glättung, Timer, Ton, Lasso, Zeichnen und halten, Stiftablage, Laser, Nach der Stunde).
+
+| Befund | Folge | Behoben |
+|---|---|---|
+| Der Ton wurde bei jedem Tipp freigeschaltet, auch mit Ton „Aus“ | Das Plugin belegte die Audiositzung des iPads und konnte Musik oder Video im Hintergrund unterbrechen | Freigabe nur noch, wenn ein Ton gewählt ist |
+| Kam das iPad erst Minuten nach dem Ablauf aus dem Hintergrund zurück, kam das Signal dann | Verspäteter Gong mitten in etwas anderem | Signal nur direkt beim Ablauf (bis 3 s danach) |
+| Laser mit Halten: die ganze Spur wurde 60-mal je Sekunde neu berechnet, auch bei stillem Stift | Unnötige Last, bei langen Markierungen spürbar | Die Schleife ruht, bis sich der Stift bewegt oder abgesetzt wird |
+| „Nach der Stunde“ schrieb Notizen mit Windows-Zeilenenden (CRLF) ganz auf LF um | Die ganze Datei geändert statt nur der Reflexion | Zeilenenden bleiben, wie sie waren |
+| Esc schloss die Präsentation auch mit offener Lasso-Auswahl | Versehentliches Beenden | Esc hebt zuerst die Auswahl auf |
+| Zeitraffer mit offener Auswahl | Auswahlrahmen über leerer Tafel | Auswahl wird vorher aufgehoben |
+| Palette öffnen verbreiterte die Lasso-Leiste | Sie konnte über den Rand ragen | Wird danach neu ausgerichtet |
+
+Neu: `npm run smoke` prüft die Abläufe im Browser automatisch (15 Prüfungen), dazu 185 Unit-Tests.
 
 ## Bewusst nicht
 - Abstimmungen über Schüler-iPads, Zufallsauswahl mit Namen, Fotos von Schülerarbeiten: Das bräuchte einen Server, oder Schülerdaten würden per iCloud mitreisen.

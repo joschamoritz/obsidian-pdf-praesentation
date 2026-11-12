@@ -128,6 +128,8 @@ npm run install-plugin -- "/Pfad/zum/Vault"
 
 Mit `npm run dev` startet die Testseite ohne Obsidian auf http://localhost:5199. Sie braucht eigene PDFs unter `dev/fixtures/` (`folien.pdf`, `blaetter.pdf`) und für die Vergleichsseite eine Tintendatei als `ink-ipad.json`. Der Ordner wird nicht eingecheckt, weil dort Unterrichtsmaterial liegt.
 
+`npm run smoke` spielt die wichtigsten Abläufe im echten Browser durch (Leiste, Zeichnen und halten, Lasso, Laser, Timer, Stiftablage) und braucht keine eigenen PDFs: Das Test-PDF entsteht dabei. Pencil-Druck, iPad, AirPlay und Ton prüft das nicht.
+
 `src/presenter/` kennt Obsidian nicht und läuft deshalb auch auf der Testseite. `src/main.ts` verbindet es mit Obsidian.
 
 pdf.js rendert über `requestAnimationFrame`. In einem verdeckten Fenster bleibt das Rendern deshalb stehen und läuft erst weiter, wenn das Fenster sichtbar wird.

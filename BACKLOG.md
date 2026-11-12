@@ -10,9 +10,6 @@ v0.13.0 lief am iPad fast durchweg (12.11.2026). Einziger Befund: Die Laserspur 
 | Funktion | Worauf achten |
 |---|---|
 | **Laser** als durchgehende Spur; voreingestellt bleibt sie, solange der Stift aufliegt (wie GoodNotes), umschaltbar auf „Verblasst gleich“; Stärke fein, mittel, kräftig | Passt Mittel jetzt? Sonst eine andere Stärke wählen oder die Werte nachjustieren |
-| **Zeichnen und halten** erkennt jetzt auch Dreieck und Pfeil (Schaft, dann ein oder zwei Haken zurück) | Wird ein Pfeil erkannt, wie du ihn zeichnest? Werden Dreiecke zu oft zu Rechtecken oder umgekehrt? |
-| **Lasso:** Umfärben über die Palette in der kleinen Leiste, Vergrößern am weißen Punkt unten rechts | Trifft der Finger bzw. Stift den Punkt gut? |
-| **Nach der Stunde:** Nach einer Präsentation aus einem Stundenentwurf, die mindestens zehn Minuten lief, drei Felder für die Reflexion | Kommt die Abfrage zur richtigen Zeit? Stört sie? „Nicht mehr fragen“ schaltet sie je Gerät ab |
 
 ## Zweiter Bildschirm: Browser-Empfänger
 
